@@ -1,0 +1,22 @@
+# Custom configuration for cell classification
+
+# Import base configuration
+_base_: "configs/cell_cls/default.yaml"
+
+# Override specific settings
+common:
+  gpu: 1  # Use different GPU
+
+data:
+  dataset: "HiCervix"  # Use different dataset
+
+backbone:
+  name: "SigLIP"  # Use different backbone model
+
+training:
+  batch_size: 32  # Smaller batch size
+  epochs: 100     # More epochs
+  lr: 0.0005      # Different learning rate
+
+evaluation:
+  compute_ci: false  # Disable confidence intervals for faster evaluation

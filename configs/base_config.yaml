@@ -1,0 +1,32 @@
+# Base configuration file with common settings
+# Task-specific configurations will inherit from this
+
+# Common settings
+common:
+  seed: 42
+  gpu: 0
+  num_workers: 4
+  disable_progress_bar: false
+
+# Backbone settings
+backbone:
+  name: "CLIP"  # Options: ResNet50, CLIP, SigLIP, SigLIP2-ViT-B, SigLIP2-ViT-L, SigLIP2-ViT-SO400M
+  pretrained: true
+  freeze: false
+
+# Training settings
+training:
+  batch_size: 64
+  epochs: 50
+  lr: 0.001
+  optimizer: "Adam"
+  weight_decay: 0.0001
+  scheduler: null
+
+# Evaluation settings
+evaluation:
+  batch_size: 64
+  compute_ci: true
+  n_bootstraps: 1000
+  kfold: false
+  k: 5
