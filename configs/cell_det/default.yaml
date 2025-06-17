@@ -1,0 +1,70 @@
+# Default configuration for cell detection
+
+# Common settings
+common:
+  seed: 42
+  gpu: 4
+  num_workers: 4
+  disable_progress_bar: false
+
+# Data configuration
+data:
+  dataset: 'CRIC'  # Will be set based on actual dataset name
+  organ: 'cervix'  # Default organ, can be overridden
+  root: '/jhcnas4/jh/cytology/CYTO_task'
+
+# Model configuration
+model:
+  name: 'fasterrcnn_resnet50_fpn'  # Detection model architecture
+  pretrained: true
+  # Available models:
+  # - fasterrcnn_resnet50_fpn
+  # - fasterrcnn_mobilenet_v3_large_fpn
+  # - fasterrcnn_mobilenet_v3_large_320_fpn
+  # - retinanet_resnet50_fpn
+  # - maskrcnn_resnet50_fpn
+
+# Training configuration
+training:
+  epochs: 50
+  batch_size: 4  # Smaller batch size for detection models
+  lr: 0.001
+  weight_decay: 0.0005
+  momentum: 0.9
+  optimizer: 'SGD'  # Detection models typically use SGD
+  
+  # Validation configuration
+  validation_frequency: 5  # Validate every N epochs (set to 1 for every epoch)
+  
+  # Detection-specific parameters
+  score_threshold: 0.5  # Score threshold for predictions during training
+  nms_threshold: 0.5    # NMS threshold
+  
+  # Learning rate scheduler
+  lr_scheduler:
+    type: 'StepLR'
+    step_size: 10
+    gamma: 0.1
+
+# Evaluation configuration
+evaluation:
+  batch_size: 2  # Smaller batch size for evaluation
+  compute_ci: true
+  n_bootstraps: 10
+  
+  # Detection-specific evaluation parameters
+  iou_thresholds: [0.5, 0.75]  # IoU thresholds for evaluation
+  score_threshold: 0.5         # Score threshold for evaluation
+  max_detections: 100          # Maximum detections per image
+  
+  # Metrics to compute
+  metrics:
+    - "map_50"
+    - "macro_f1"
+    - "precision"
+    - "recall"
+
+# Output configuration
+output:
+  model_dir: 'checkpoints/cell_det'
+  results_dir: 'results/cell_det' 

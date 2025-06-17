@@ -1,0 +1,64 @@
+# Configuration for RetinaNet cell detection
+
+# Common settings
+common:
+  seed: 42
+  gpu: 4
+  num_workers: 4
+  disable_progress_bar: false
+
+# Data configuration
+data:
+  dataset: 'CRIC'  # Will be set based on actual dataset name
+  organ: 'cervix'  # Default organ, can be overridden
+  root: '/jhcnas4/jh/cytology/CYTO_task'
+
+# Model configuration - RetinaNet
+model:
+  name: 'retinanet_resnet50_fpn'
+  pretrained: true
+
+# Training configuration - RetinaNet specific adjustments
+training:
+  epochs: 60  # RetinaNet may need more epochs
+  batch_size: 4
+  lr: 0.001
+  weight_decay: 0.0001
+  momentum: 0.9
+  optimizer: 'SGD'
+  
+  # Validation configuration
+  validation_frequency: 3  # Validate every 3 epochs for RetinaNet (more frequent)
+  
+  # RetinaNet-specific parameters
+  score_threshold: 0.3  # Lower threshold for RetinaNet
+  nms_threshold: 0.5
+  
+  # Learning rate scheduler
+  lr_scheduler:
+    type: 'StepLR'
+    step_size: 15
+    gamma: 0.1
+
+# Evaluation configuration
+evaluation:
+  batch_size: 2
+  compute_ci: true
+  n_bootstraps: 1000
+  
+  # Detection-specific evaluation parameters
+  iou_thresholds: [0.5, 0.75]
+  score_threshold: 0.3  # Lower threshold for evaluation
+  max_detections: 100
+  
+  # Metrics to compute
+  metrics:
+    - "map_50"
+    - "macro_f1"
+    - "precision"
+    - "recall"
+
+# Output configuration
+output:
+  model_dir: 'checkpoints/cell_det'
+  results_dir: 'results/cell_det' 
