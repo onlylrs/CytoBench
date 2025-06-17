@@ -5,37 +5,20 @@ This document describes the cell segmentation functionality added to the CytoBen
 ## Overview
 
 The cell segmentation implementation provides comprehensive support for instance segmentation of cells with:
-- **5 segmentation models**: Mask R-CNN ResNet-50 FPN, Faster R-CNN variants, RetinaNet ResNet-50 FPN
+- **Mask R-CNN ResNet-50 FPN**: True instance segmentation with learned pixel-level masks
 - **Comprehensive metrics**: mAP, precision, recall, F1-score, IoU, Dice coefficient, AJI (Aggregated Jaccard Index)
 - **Bootstrap confidence intervals**: Statistical significance testing with configurable sample sizes
 - **COCO-style datasets**: Support for standard annotation formats with train/val/test splits
 
-## Supported Models
+## Supported Model
 
-### 1. Mask R-CNN ResNet-50 FPN
+### Mask R-CNN ResNet-50 FPN
 - **Name**: `maskrcnn_resnet50_fpn`
-- **Description**: True instance segmentation model with dedicated mask prediction head
-- **Best for**: High-quality segmentation masks with precise boundaries
-
-### 2. Faster R-CNN ResNet-50 FPN (Adapted)
-- **Name**: `fasterrcnn_resnet50_fpn`
-- **Description**: Detection model adapted for segmentation by generating masks from bounding boxes
-- **Best for**: When bounding box detection is sufficient or as baseline
-
-### 3. Faster R-CNN MobileNetV3-Large FPN
-- **Name**: `fasterrcnn_mobilenet_v3_large_fpn`
-- **Description**: Lightweight detection model adapted for segmentation
-- **Best for**: Resource-constrained environments
-
-### 4. Faster R-CNN MobileNetV3-Large 320 FPN
-- **Name**: `fasterrcnn_mobilenet_v3_large_320_fpn`
-- **Description**: Compact version for smaller input sizes
-- **Best for**: Fast inference on mobile devices
-
-### 5. RetinaNet ResNet-50 FPN (Adapted)
-- **Name**: `retinanet_resnet50_fpn`
-- **Description**: Single-stage detector adapted for segmentation
-- **Best for**: Balanced speed and accuracy
+- **Type**: **Instance Segmentation Model**
+- **Description**: True instance segmentation with dedicated mask prediction head that learns pixel-level segmentation masks
+- **Architecture**: ResNet-50 backbone with Feature Pyramid Network (FPN)
+- **Output**: High-quality segmentation masks with precise object boundaries
+- **Best for**: All segmentation tasks requiring accurate pixel-level predictions
 
 ## Dataset Format
 
@@ -125,11 +108,11 @@ Each `annotations.json` file should follow the COCO format:
 # Train Mask R-CNN with default configuration
 ./scripts/train.sh cell_seg
 
-# Train with specific model configuration
-./scripts/train.sh cell_seg configs/cell_seg/fasterrcnn_resnet50_fpn.yaml
+# Train with custom configuration
+./scripts/train.sh cell_seg configs/cell_seg/custom.yaml
 
 # Train in background
-./scripts/train.sh -b cell_seg configs/cell_seg/default.yaml
+./scripts/train.sh -b cell_seg
 ```
 
 ### Testing
