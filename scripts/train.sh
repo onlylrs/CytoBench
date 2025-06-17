@@ -77,8 +77,7 @@ case $TASK in
         CMD="python tools/train.py --config \"$CONFIG_FILE\""
         ;;
     cell_det)
-        echo "Cell detection training not implemented yet"
-        exit 1
+        CMD="python tools/train_det.py --config \"$CONFIG_FILE\""
         ;;
     cell_seg)
         echo "Cell segmentation training not implemented yet"
