@@ -1,0 +1,54 @@
+# Default configuration for cell segmentation
+
+# Common settings
+common:
+  seed: 42
+  gpu: 0
+  num_workers: 4
+  disable_progress_bar: false
+
+# Data configuration
+data:
+  root: './data'
+  dataset: 'CRIC'
+  organ: 'cervix'
+
+# Model configuration
+model:
+  name: 'maskrcnn_resnet50_fpn'
+  pretrained: true
+
+# Training configuration
+training:
+  epochs: 50
+  batch_size: 4
+  lr: 0.005
+  momentum: 0.9
+  weight_decay: 0.0005
+  validation_frequency: 5
+  
+  lr_scheduler:
+    type: 'StepLR'
+    step_size: 16
+    gamma: 0.1
+
+# Evaluation configuration
+evaluation:
+  batch_size: 4
+  iou_thresholds: [0.5]
+  score_threshold: 0.5
+  compute_ci: true
+  n_bootstraps: 1000
+  metrics:
+    - 'precision'
+    - 'recall'
+    - 'f1'
+    - 'map'
+    - 'iou'
+    - 'dice'
+    - 'aji'
+
+# Output configuration
+output:
+  model_dir: './models/cell_seg'
+  results_dir: './results/cell_seg' 
