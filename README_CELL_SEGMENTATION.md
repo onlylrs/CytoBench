@@ -43,24 +43,21 @@ The implementation expects COCO-style datasets with the following structure:
 
 ```
 dataset_root/
-├── train/
-│   ├── images/
-│   │   ├── image1.jpg
-│   │   ├── image2.jpg
-│   │   └── ...
-│   └── annotations.json
-├── val/
-│   ├── images/
-│   │   ├── image1.jpg
-│   │   ├── image2.jpg
-│   │   └── ...
-│   └── annotations.json
-└── test/
-    ├── images/
-    │   ├── image1.jpg
-    │   ├── image2.jpg
-    │   └── ...
-    └── annotations.json
+├── train/              # folder with images
+│   ├── image1.jpg
+│   ├── image2.jpg
+│   └── ...
+├── val/                # folder with images
+│   ├── image1.jpg
+│   ├── image2.jpg
+│   └── ...
+├── test/               # folder with images
+│   ├── image1.jpg
+│   ├── image2.jpg
+│   └── ...
+├── train.json          # annotations for train split
+├── val.json            # annotations for val split
+└── test.json           # annotations for test split
 ```
 
 ### Annotation Format

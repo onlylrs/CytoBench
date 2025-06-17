@@ -3,14 +3,14 @@
 # Common settings
 common:
   seed: 42
-  gpu: 0
+  gpu: 1
   num_workers: 4
   disable_progress_bar: false
 
 # Data configuration
 data:
-  root: './data'
-  dataset: 'CRIC'
+  root: '/jhcnas4/jh/cytology/CYTO_task'
+  dataset: 'ISBI2014'
   organ: 'cervix'
 
 # Model configuration

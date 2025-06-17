@@ -14,15 +14,12 @@ class CellSegDataset(Dataset):
     
     Expected directory structure:
     dataset_root/
-    ├── train/
-    │   ├── images/
-    │   └── annotations.json
-    ├── val/
-    │   ├── images/
-    │   └── annotations.json
-    └── test/
-        ├── images/
-        └── annotations.json
+    ├── train/           # folder with images
+    ├── val/             # folder with images
+    ├── test/            # folder with images
+    ├── train.json       # annotations for train split
+    ├── val.json         # annotations for val split
+    └── test.json        # annotations for test split
     """
     
     def __init__(self, root, task_organ, split='train', transform=None):
@@ -40,8 +37,8 @@ class CellSegDataset(Dataset):
         
         # Paths
         self.split_dir = os.path.join(root, split)
-        self.images_dir = os.path.join(self.split_dir, 'images')
-        self.annotations_file = os.path.join(self.split_dir, 'annotations.json')
+        self.images_dir = self.split_dir  # Images are directly in the split folder
+        self.annotations_file = os.path.join(root, f'{split}.json')  # JSON files are at root level
         
         # Load annotations
         self._load_annotations()
