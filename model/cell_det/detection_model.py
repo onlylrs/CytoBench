@@ -5,12 +5,10 @@ from torchvision.models.detection import (
     fasterrcnn_resnet50_fpn,
     fasterrcnn_mobilenet_v3_large_fpn,
     fasterrcnn_mobilenet_v3_large_320_fpn,
-    retinanet_resnet50_fpn,
-    maskrcnn_resnet50_fpn
+    retinanet_resnet50_fpn
 )
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.retinanet import RetinaNetClassificationHead
-from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 
 
 class DetectionModel(nn.Module):
@@ -39,8 +37,6 @@ class DetectionModel(nn.Module):
             self.model = self._build_fasterrcnn_mobilenet_v3_large_320_fpn(pretrained)
         elif model_name == 'retinanet_resnet50_fpn':
             self.model = self._build_retinanet_resnet50_fpn(pretrained)
-        elif model_name == 'maskrcnn_resnet50_fpn':
-            self.model = self._build_maskrcnn_resnet50_fpn(pretrained)
         else:
             raise ValueError(f"Unsupported model: {model_name}")
     
@@ -88,22 +84,7 @@ class DetectionModel(nn.Module):
         
         return model
     
-    def _build_maskrcnn_resnet50_fpn(self, pretrained):
-        """Build Mask R-CNN with ResNet-50 FPN backbone"""
-        model = maskrcnn_resnet50_fpn(pretrained=pretrained)
-        
-        # Replace the box predictor
-        in_features = model.roi_heads.box_predictor.cls_score.in_features
-        model.roi_heads.box_predictor = FastRCNNPredictor(in_features, self.num_classes)
-        
-        # Replace the mask predictor
-        in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
-        hidden_layer = 256
-        model.roi_heads.mask_predictor = MaskRCNNPredictor(
-            in_features_mask, hidden_layer, self.num_classes
-        )
-        
-        return model
+
     
     def forward(self, images, targets=None):
         """
@@ -147,7 +128,7 @@ def build_detection_model(model_name, num_classes, pretrained=True):
         # RetinaNet doesn't have background class
         total_classes = num_classes
     else:
-        # Faster R-CNN and Mask R-CNN have background class
+        # Faster R-CNN has background class
         total_classes = num_classes + 1
     
     return DetectionModel(model_name, total_classes, pretrained)
@@ -158,8 +139,7 @@ AVAILABLE_MODELS = [
     'fasterrcnn_resnet50_fpn',
     'fasterrcnn_mobilenet_v3_large_fpn',
     'fasterrcnn_mobilenet_v3_large_320_fpn',
-    'retinanet_resnet50_fpn',
-    'maskrcnn_resnet50_fpn'
+    'retinanet_resnet50_fpn'
 ]
 
 
