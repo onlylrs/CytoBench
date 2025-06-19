@@ -98,8 +98,7 @@ case $TASK in
         CMD="python tools/test_det.py --config \"$CONFIG_FILE\" --checkpoint \"$CHECKPOINT_PATH\""
         ;;
     cell_seg)
-        echo "Cell segmentation testing not implemented yet"
-        exit 1
+        CMD="python tools/test_seg.py --config \"$CONFIG_FILE\" --checkpoint \"$CHECKPOINT_PATH\""
         ;;
     WSI_cls)
         echo "WSI classification testing not implemented yet"

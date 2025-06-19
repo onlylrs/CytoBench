@@ -12,14 +12,14 @@ import datetime
 # Add project root to Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from data.cell_det.dataset import CellDetDataset, collate_fn
-from model.cell_det.detection_model import build_detection_model
-from evaluation.cell_det.metrics import compute_detection_metrics
+from data.cell_seg.dataset import CellSegDataset, collate_fn
+from model.cell_seg.segmentation_model import build_segmentation_model
+from evaluation.cell_seg.metrics import compute_segmentation_metrics
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Cell Detection Training Script')
-    parser.add_argument('--config', type=str, default='./configs/cell_det/default.yaml',
+    parser = argparse.ArgumentParser(description='Cell Segmentation Training Script')
+    parser.add_argument('--config', type=str, default='./configs/cell_seg/default.yaml',
                         help='Path to configuration file')
     return parser.parse_args()
 
@@ -128,14 +128,16 @@ def evaluate_model(model, data_loader, device):
                 pred = {
                     'boxes': output['boxes'].cpu(),
                     'labels': output['labels'].cpu(),
-                    'scores': output['scores'].cpu()
+                    'scores': output['scores'].cpu(),
+                    'masks': output['masks'].cpu()
                 }
                 predictions.append(pred)
                 
                 # Store ground truth (already on CPU)
                 gt = {
                     'boxes': target['boxes'],
-                    'labels': target['labels']
+                    'labels': target['labels'],
+                    'masks': target['masks']
                 }
                 ground_truths.append(gt)
     
@@ -154,17 +156,17 @@ def train(config):
     
     print(f"Loading datasets from {dataset_root}")
     
-    train_dataset = CellDetDataset(
+    train_dataset = CellSegDataset(
         root=dataset_root,
         split='train'
     )
     
-    val_dataset = CellDetDataset(
+    val_dataset = CellSegDataset(
         root=dataset_root,
         split='val'
     )
     
-    test_dataset = CellDetDataset(
+    test_dataset = CellSegDataset(
         root=dataset_root,
         split='test'
     )
@@ -196,7 +198,7 @@ def train(config):
     
     # Build model
     num_classes = train_dataset.num_classes
-    model = build_detection_model(
+    model = build_segmentation_model(
         config['model']['name'],
         num_classes,
         config['model']['pretrained']
@@ -261,7 +263,7 @@ def train(config):
                 
                 # Compute validation mAP
                 class_names = train_dataset.get_class_names()
-                val_metrics = compute_detection_metrics(
+                val_metrics = compute_segmentation_metrics(
                     val_predictions, 
                     val_ground_truths, 
                     class_names,
@@ -272,11 +274,15 @@ def train(config):
                 
                 val_map = val_metrics['mAP_50']
                 val_macro_f1 = val_metrics['macro_f1']
+                val_mean_dice = val_metrics['mean_dice']
+                val_aji = val_metrics['aji']
                 
                 print(f'Epoch [{epoch}/{config["training"]["epochs"]}], '
                       f'Train Loss: {train_loss:.4f}, '
                       f'Val mAP@0.5: {val_map:.2f}%, '
-                      f'Val Macro F1: {val_macro_f1:.2f}%')
+                      f'Val Macro F1: {val_macro_f1:.2f}%, '
+                      f'Val Dice: {val_mean_dice:.2f}%, '
+                      f'Val AJI: {val_aji:.2f}%')
                 
                 # Save best model based on validation mAP
                 if val_map > best_val_map:
@@ -321,7 +327,7 @@ def train(config):
     
     # Compute comprehensive metrics
     class_names = train_dataset.get_class_names()
-    metrics = compute_detection_metrics(
+    metrics = compute_segmentation_metrics(
         test_predictions,
         test_ground_truths,
         class_names,
@@ -332,7 +338,7 @@ def train(config):
     )
     
     # Format and display results
-    formatted_results = format_detection_results(metrics, class_names, compute_ci)
+    formatted_results = format_segmentation_results(metrics, class_names, compute_ci)
     print(formatted_results)
     
     # Save results to file
@@ -352,7 +358,7 @@ def train(config):
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     
     # Generate placeholder table paths (actual table generation can be implemented later)
-    table_metrics = ['map_50', 'macro_f1', 'precision']
+    table_metrics = ['map_50', 'macro_f1', 'dice', 'aji']
     for metric in table_metrics:
         csv_path = f'results/table_{metric}{ci_suffix}_{timestamp}.csv'
         latex_path = f'results/table_{metric}{ci_suffix}_{timestamp}.tex'
@@ -370,8 +376,8 @@ def train(config):
     }
 
 
-def format_detection_results(metrics, class_names, compute_ci):
-    """Format detection results for display and saving"""
+def format_segmentation_results(metrics, class_names, compute_ci):
+    """Format segmentation results for display and saving"""
     def format_metric_with_ci(value, ci=None):
         if ci is not None:
             lower, upper = ci
@@ -379,7 +385,7 @@ def format_detection_results(metrics, class_names, compute_ci):
         return f"{value:.2f}%"
     
     formatted_results = "="*80 + "\n"
-    formatted_results += "DETECTION METRICS\n"
+    formatted_results += "SEGMENTATION METRICS\n"
     formatted_results += "="*80 + "\n\n"
     
     # Overall metrics with confidence intervals
@@ -393,13 +399,18 @@ def format_detection_results(metrics, class_names, compute_ci):
     
     formatted_results += f"Weighted Precision: {format_metric_with_ci(metrics['weighted_precision'], metrics.get('weighted_precision_ci') if compute_ci else None)}\n"
     formatted_results += f"Weighted Recall: {format_metric_with_ci(metrics['weighted_recall'], metrics.get('weighted_recall_ci') if compute_ci else None)}\n"
-    formatted_results += f"Weighted F1 Score: {format_metric_with_ci(metrics['weighted_f1'], metrics.get('weighted_f1_ci') if compute_ci else None)}\n"
+    formatted_results += f"Weighted F1 Score: {format_metric_with_ci(metrics['weighted_f1'], metrics.get('weighted_f1_ci') if compute_ci else None)}\n\n"
+    
+    # Segmentation-specific metrics
+    formatted_results += f"Mean IoU: {format_metric_with_ci(metrics['mean_iou'], metrics.get('mean_iou_ci') if compute_ci else None)}\n"
+    formatted_results += f"Mean Dice: {format_metric_with_ci(metrics['mean_dice'], metrics.get('mean_dice_ci') if compute_ci else None)}\n"
+    formatted_results += f"AJI Score: {format_metric_with_ci(metrics['aji'], metrics.get('aji_ci') if compute_ci else None)}\n"
     
     # Per-class metrics
     formatted_results += "\nPer-class Metrics:\n"
-    formatted_results += "-" * 120 + "\n"
-    formatted_results += f"{'Class':<20} {'Precision':<30} {'Recall':<30} {'F1 Score':<30} {'Support':<10}\n"
-    formatted_results += "-" * 120 + "\n"
+    formatted_results += "-" * 140 + "\n"
+    formatted_results += f"{'Class':<15} {'Precision':<25} {'Recall':<25} {'F1 Score':<25} {'IoU':<25} {'Dice':<25} {'Support':<10}\n"
+    formatted_results += "-" * 140 + "\n"
     
     for i, class_name in enumerate(class_names):
         # Format metrics with CI if available
@@ -410,14 +421,16 @@ def format_detection_results(metrics, class_names, compute_ci):
         prec_str = format_metric_with_ci(metrics['precision'][i], prec_ci)
         rec_str = format_metric_with_ci(metrics['recall'][i], rec_ci)
         f1_str = format_metric_with_ci(metrics['f1'][i], f1_ci)
+        iou_str = f"{metrics['iou_per_class'][i]:.2f}%"
+        dice_str = f"{metrics['dice_per_class'][i]:.2f}%"
         support = metrics['total_gt'][i]
         
-        formatted_results += f"{class_name:<20} {prec_str:<30} {rec_str:<30} {f1_str:<30} {support:<10}\n"
+        formatted_results += f"{class_name:<15} {prec_str:<25} {rec_str:<25} {f1_str:<25} {iou_str:<25} {dice_str:<25} {support:<10}\n"
     
     # Detection statistics
-    formatted_results += "\nDetection Statistics:\n"
+    formatted_results += "\nSegmentation Statistics:\n"
     formatted_results += "-" * 60 + "\n"
-    formatted_results += f"{'Class':<20} {'TP':<8} {'FP':<8} {'FN':<8} {'Total GT':<10} {'Total Pred':<12}\n"
+    formatted_results += f"{'Class':<15} {'TP':<8} {'FP':<8} {'FN':<8} {'Total GT':<10} {'Total Pred':<12}\n"
     formatted_results += "-" * 60 + "\n"
     
     for i, class_name in enumerate(class_names):
@@ -427,7 +440,7 @@ def format_detection_results(metrics, class_names, compute_ci):
         total_gt = metrics['total_gt'][i]
         total_pred = metrics['total_pred'][i]
         
-        formatted_results += f"{class_name:<20} {tp:<8} {fp:<8} {fn:<8} {total_gt:<10} {total_pred:<12}\n"
+        formatted_results += f"{class_name:<15} {tp:<8} {fp:<8} {fn:<8} {total_gt:<10} {total_pred:<12}\n"
     
     return formatted_results
 

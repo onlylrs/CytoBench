@@ -1,4 +1,4 @@
-# Default configuration for cell classification
+# Configuration for HiCervix dataset cell classification
 
 # Common settings
 common:
@@ -9,7 +9,7 @@ common:
 
 # Data settings
 data:
-  dataset: "SIPaKMeD"  # Options: Herlev, HiCervix, JinWooChoi, FNAC2019, LDCC, SIPaKMeD, Barcelona, BCI, BCFCI, BMCC
+  dataset: "HiCervix"
 
 # Model settings
 model:

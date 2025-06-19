@@ -10,7 +10,6 @@ common:
 # Data configuration
 data:
   dataset: 'CRIC'  # Will be set based on actual dataset name
-  organ: 'cervix'  # Default organ, can be overridden
   root: '/jhcnas4/jh/cytology/CYTO_task'
 
 # Model configuration - RetinaNet

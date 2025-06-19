@@ -14,7 +14,8 @@ The following detection models are supported:
 2. **Faster R-CNN MobileNetV3-Large FPN** (`fasterrcnn_mobilenet_v3_large_fpn`)
 3. **Faster R-CNN MobileNetV3-Large 320 FPN** (`fasterrcnn_mobilenet_v3_large_320_fpn`)
 4. **RetinaNet ResNet-50 FPN** (`retinanet_resnet50_fpn`)
-5. **Mask R-CNN ResNet-50 FPN** (`maskrcnn_resnet50_fpn`)
+
+**Note**: Mask R-CNN has been moved to the segmentation module (`cell_seg`) since it provides true instance segmentation capabilities.
 
 ## Dataset Format
 

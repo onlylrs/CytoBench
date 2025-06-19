@@ -9,15 +9,15 @@ from tqdm import tqdm
 # Add project root to Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from data.cell_det.dataset import CellDetDataset, collate_fn
-from model.cell_det.detection_model import build_detection_model
-from evaluation.cell_det.metrics import compute_detection_metrics
+from data.cell_seg.dataset import CellSegDataset, collate_fn
+from model.cell_seg.segmentation_model import build_segmentation_model
+from evaluation.cell_seg.metrics import compute_segmentation_metrics
 
 
 def parse_args():
     """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description='Cell Detection Testing Script')
-    parser.add_argument('--config', type=str, default='./configs/cell_det/default.yaml',
+    parser = argparse.ArgumentParser(description='Cell Segmentation Testing Script')
+    parser.add_argument('--config', type=str, default='./configs/cell_seg/default.yaml',
                         help='Path to configuration file')
     parser.add_argument('--checkpoint', type=str, required=True,
                         help='Path to model checkpoint')
@@ -37,7 +37,7 @@ def setup_model_and_data(config, checkpoint_path, device):
     dataset_name = config['data']['dataset']
     dataset_root = os.path.join(config['data']['root'], dataset_name)
     
-    test_dataset = CellDetDataset(
+    test_dataset = CellSegDataset(
         root=dataset_root,
         split='test'
     )
@@ -53,7 +53,7 @@ def setup_model_and_data(config, checkpoint_path, device):
     
     # Build model
     num_classes = test_dataset.num_classes
-    model = build_detection_model(
+    model = build_segmentation_model(
         config['model']['name'],
         num_classes,
         config['model']['pretrained']
@@ -91,14 +91,16 @@ def evaluate_model(model, data_loader, device):
                 pred = {
                     'boxes': output['boxes'].cpu(),
                     'labels': output['labels'].cpu(),
-                    'scores': output['scores'].cpu()
+                    'scores': output['scores'].cpu(),
+                    'masks': output['masks'].cpu()
                 }
                 predictions.append(pred)
                 
                 # Store ground truth (already on CPU)
                 gt = {
                     'boxes': target['boxes'],
-                    'labels': target['labels']
+                    'labels': target['labels'],
+                    'masks': target['masks']
                 }
                 ground_truths.append(gt)
     
@@ -116,7 +118,7 @@ def format_metric_with_ci(value, ci=None):
 def format_results(metrics, class_names, compute_ci):
     """Format evaluation results for display and saving"""
     formatted_results = "="*80 + "\n"
-    formatted_results += "DETECTION METRICS\n"
+    formatted_results += "SEGMENTATION METRICS\n"
     formatted_results += "="*80 + "\n\n"
     
     # Overall metrics with confidence intervals
@@ -130,13 +132,18 @@ def format_results(metrics, class_names, compute_ci):
     
     formatted_results += f"Weighted Precision: {format_metric_with_ci(metrics['weighted_precision'], metrics.get('weighted_precision_ci') if compute_ci else None)}\n"
     formatted_results += f"Weighted Recall: {format_metric_with_ci(metrics['weighted_recall'], metrics.get('weighted_recall_ci') if compute_ci else None)}\n"
-    formatted_results += f"Weighted F1 Score: {format_metric_with_ci(metrics['weighted_f1'], metrics.get('weighted_f1_ci') if compute_ci else None)}\n"
+    formatted_results += f"Weighted F1 Score: {format_metric_with_ci(metrics['weighted_f1'], metrics.get('weighted_f1_ci') if compute_ci else None)}\n\n"
+    
+    # Segmentation-specific metrics
+    formatted_results += f"Mean IoU: {format_metric_with_ci(metrics['mean_iou'], metrics.get('mean_iou_ci') if compute_ci else None)}\n"
+    formatted_results += f"Mean Dice: {format_metric_with_ci(metrics['mean_dice'], metrics.get('mean_dice_ci') if compute_ci else None)}\n"
+    formatted_results += f"AJI Score: {format_metric_with_ci(metrics['aji'], metrics.get('aji_ci') if compute_ci else None)}\n"
     
     # Per-class metrics
     formatted_results += "\nPer-class Metrics:\n"
-    formatted_results += "-" * 120 + "\n"
-    formatted_results += f"{'Class':<20} {'Precision':<30} {'Recall':<30} {'F1 Score':<30} {'Support':<10}\n"
-    formatted_results += "-" * 120 + "\n"
+    formatted_results += "-" * 140 + "\n"
+    formatted_results += f"{'Class':<15} {'Precision':<25} {'Recall':<25} {'F1 Score':<25} {'IoU':<25} {'Dice':<25} {'Support':<10}\n"
+    formatted_results += "-" * 140 + "\n"
     
     for i, class_name in enumerate(class_names):
         # Format metrics with CI if available
@@ -147,14 +154,16 @@ def format_results(metrics, class_names, compute_ci):
         prec_str = format_metric_with_ci(metrics['precision'][i], prec_ci)
         rec_str = format_metric_with_ci(metrics['recall'][i], rec_ci)
         f1_str = format_metric_with_ci(metrics['f1'][i], f1_ci)
+        iou_str = f"{metrics['iou_per_class'][i]:.2f}%"
+        dice_str = f"{metrics['dice_per_class'][i]:.2f}%"
         support = metrics['total_gt'][i]
         
-        formatted_results += f"{class_name:<20} {prec_str:<30} {rec_str:<30} {f1_str:<30} {support:<10}\n"
+        formatted_results += f"{class_name:<15} {prec_str:<25} {rec_str:<25} {f1_str:<25} {iou_str:<25} {dice_str:<25} {support:<10}\n"
     
-    # Detection statistics
-    formatted_results += "\nDetection Statistics:\n"
+    # Segmentation statistics
+    formatted_results += "\nSegmentation Statistics:\n"
     formatted_results += "-" * 60 + "\n"
-    formatted_results += f"{'Class':<20} {'TP':<8} {'FP':<8} {'FN':<8} {'Total GT':<10} {'Total Pred':<12}\n"
+    formatted_results += f"{'Class':<15} {'TP':<8} {'FP':<8} {'FN':<8} {'Total GT':<10} {'Total Pred':<12}\n"
     formatted_results += "-" * 60 + "\n"
     
     for i, class_name in enumerate(class_names):
@@ -164,7 +173,7 @@ def format_results(metrics, class_names, compute_ci):
         total_gt = metrics['total_gt'][i]
         total_pred = metrics['total_pred'][i]
         
-        formatted_results += f"{class_name:<20} {tp:<8} {fp:<8} {fn:<8} {total_gt:<10} {total_pred:<12}\n"
+        formatted_results += f"{class_name:<15} {tp:<8} {fp:<8} {fn:<8} {total_gt:<10} {total_pred:<12}\n"
     
     return formatted_results
 
@@ -188,7 +197,7 @@ def save_results(formatted_results, config, checkpoint_path, compute_ci):
 
 
 def test(config, checkpoint_path):
-    """Test a trained detection model"""
+    """Test a trained segmentation model"""
     # Set device
     device = torch.device(f"cuda:{config['common']['gpu']}" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -210,7 +219,7 @@ def test(config, checkpoint_path):
     predictions, ground_truths = evaluate_model(model, test_loader, device)
     
     # Compute metrics
-    metrics = compute_detection_metrics(
+    metrics = compute_segmentation_metrics(
         predictions, 
         ground_truths, 
         class_names,

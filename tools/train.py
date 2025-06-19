@@ -88,27 +88,31 @@ def train(config):
     
     # Build datasets
     dataset_name = config['data']['dataset']
-    dataset_root = os.path.join(config['data']['root'], dataset_name)
-    
+
+    # Get root directory if provided in config (fallback)
+    dataset_root = None
+    if 'root' in config.get('data', {}):
+        dataset_root = os.path.join(config['data']['root'], dataset_name)
+
     train_dataset = CellClsDataset(
-        root=dataset_root,
-        task_organ=config['data']['organ'],
+        dataset_name=dataset_name,
         preprocess=preprocess,
-        split='train'
+        split='train',
+        root=dataset_root
     )
-    
+
     val_dataset = CellClsDataset(
-        root=dataset_root,
-        task_organ=config['data']['organ'],
+        dataset_name=dataset_name,
         preprocess=preprocess,
-        split='val'
+        split='val',
+        root=dataset_root
     )
-    
+
     test_dataset = CellClsDataset(
-        root=dataset_root,
-        task_organ=config['data']['organ'],
+        dataset_name=dataset_name,
         preprocess=preprocess,
-        split='test'
+        split='test',
+        root=dataset_root
     )
     
     # Create data loaders
