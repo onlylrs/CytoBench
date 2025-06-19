@@ -10,7 +10,6 @@ common:
 # Data configuration
 data:
   dataset: 'CRIC'  # Will be set based on actual dataset name
-  organ: 'cervix'  # Default organ, can be overridden
   root: '/jhcnas4/jh/cytology/CYTO_task'
 
 # Model configuration
@@ -49,7 +48,7 @@ training:
 evaluation:
   batch_size: 2  # Smaller batch size for evaluation
   compute_ci: true
-  n_bootstraps: 10
+  n_bootstraps: 50
   
   # Detection-specific evaluation parameters
   iou_thresholds: [0.5, 0.75]  # IoU thresholds for evaluation

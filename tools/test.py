@@ -40,7 +40,6 @@ def setup_model_and_data(config, checkpoint_path, device):
     
     test_dataset = CellClsDataset(
         root=dataset_root,
-        task_organ=config['data']['organ'],
         preprocess=preprocess,
         split='test'
     )

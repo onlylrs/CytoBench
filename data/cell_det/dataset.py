@@ -31,16 +31,14 @@ class CellDetDataset(Dataset):
     └── test.json
     """
     
-    def __init__(self, root, task_organ, preprocess=None, split='train'):
+    def __init__(self, root, preprocess=None, split='train'):
         """
         Args:
             root (str): Root directory of the dataset
-            task_organ (str): Organ type (e.g., 'cervix', 'breast', etc.)
             preprocess (callable, optional): Preprocessing function for images
             split (str): Dataset split ('train', 'val', 'test')
         """
         self.root = root
-        self.task_organ = task_organ
         self.split = split
         self.preprocess = preprocess
         

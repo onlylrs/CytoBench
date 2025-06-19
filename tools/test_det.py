@@ -39,7 +39,6 @@ def setup_model_and_data(config, checkpoint_path, device):
     
     test_dataset = CellDetDataset(
         root=dataset_root,
-        task_organ=config['data']['organ'],
         split='test'
     )
     

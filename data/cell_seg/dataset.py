@@ -22,16 +22,14 @@ class CellSegDataset(Dataset):
     └── test.json        # annotations for test split
     """
     
-    def __init__(self, root, task_organ, split='train', transform=None):
+    def __init__(self, root, split='train', transform=None):
         """
         Args:
             root (str): Root directory of the dataset
-            task_organ (str): Organ type (e.g., 'cervix')
             split (str): Dataset split ('train', 'val', 'test')
             transform (callable, optional): Optional transform to be applied on images
         """
         self.root = root
-        self.task_organ = task_organ
         self.split = split
         self.transform = transform
         
@@ -185,7 +183,6 @@ if __name__ == '__main__':
     dataset_root = '/path/to/your/dataset'
     dataset = CellSegDataset(
         root=dataset_root,
-        task_organ='cervix',
         split='train'
     )
     

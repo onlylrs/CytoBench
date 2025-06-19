@@ -156,19 +156,16 @@ def train(config):
     
     train_dataset = CellDetDataset(
         root=dataset_root,
-        task_organ=config['data']['organ'],
         split='train'
     )
     
     val_dataset = CellDetDataset(
         root=dataset_root,
-        task_organ=config['data']['organ'],
         split='val'
     )
     
     test_dataset = CellDetDataset(
         root=dataset_root,
-        task_organ=config['data']['organ'],
         split='test'
     )
     
