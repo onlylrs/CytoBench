@@ -37,9 +37,15 @@ def setup_model_and_data(config, checkpoint_path, device):
     dataset_name = config['data']['dataset']
     dataset_root = os.path.join(config['data']['root'], dataset_name)
     
+    # Get annotations directory and category ID offset from config
+    annotations_dir = config['data'].get('annotations_dir', None)
+    category_id_offset = config['data'].get('category_id_offset', 1)
+    
     test_dataset = CellSegDataset(
         root=dataset_root,
-        split='test'
+        split='test',
+        annotations_dir=annotations_dir,
+        category_id_offset=category_id_offset
     )
     
     # Create data loader
@@ -223,7 +229,7 @@ def test(config, checkpoint_path):
         predictions, 
         ground_truths, 
         class_names,
-        compute_ci=compute_ci,
+        compute_confidence_intervals=compute_ci,
         n_bootstraps=n_bootstraps,
         iou_thresholds=config['evaluation']['iou_thresholds'],
         score_threshold=config['evaluation']['score_threshold']

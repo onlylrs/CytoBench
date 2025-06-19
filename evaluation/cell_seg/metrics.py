@@ -4,6 +4,7 @@ from sklearn.metrics import confusion_matrix
 from scipy.optimize import linear_sum_assignment
 import warnings
 from collections import defaultdict
+from tqdm import tqdm
 
 
 def compute_iou(mask1, mask2):
@@ -33,7 +34,7 @@ def compute_aji(pred_masks, gt_masks):
         gt_masks: List of ground truth masks (each mask is a 2D numpy array)
     
     Returns:
-        float: AJI score
+        float: AJI score (between 0 and 1)
     """
     if len(gt_masks) == 0 and len(pred_masks) == 0:
         return 1.0
@@ -53,35 +54,36 @@ def compute_aji(pred_masks, gt_masks):
     # Find optimal assignment using Hungarian algorithm
     pred_indices, gt_indices = linear_sum_assignment(-iou_matrix)
     
-    # Compute AJI
-    matched_iou_sum = 0
-    for p_idx, g_idx in zip(pred_indices, gt_indices):
-        matched_iou_sum += iou_matrix[p_idx, g_idx]
-    
-    total_union = 0
+    # Compute intersection and union for matched pairs
+    intersection_sum = 0
+    union_sum = 0
     matched_gt = set(gt_indices)
     matched_pred = set(pred_indices)
     
-    # Union of matched pairs
+    # For matched pairs: compute intersection and union
     for p_idx, g_idx in zip(pred_indices, gt_indices):
         pred_mask = pred_masks[p_idx]
         gt_mask = gt_masks[g_idx]
-        total_union += np.logical_or(pred_mask, gt_mask).sum()
+        intersection = np.logical_and(pred_mask, gt_mask).sum()
+        union = np.logical_or(pred_mask, gt_mask).sum()
+        intersection_sum += intersection
+        union_sum += union
     
-    # Union of unmatched predictions
+    # Add unmatched predictions to union (they contribute 0 to intersection)
     for i, pred_mask in enumerate(pred_masks):
         if i not in matched_pred:
-            total_union += pred_mask.sum()
+            union_sum += pred_mask.sum()
     
-    # Union of unmatched ground truths
+    # Add unmatched ground truths to union (they contribute 0 to intersection)
     for j, gt_mask in enumerate(gt_masks):
         if j not in matched_gt:
-            total_union += gt_mask.sum()
+            union_sum += gt_mask.sum()
     
-    if total_union == 0:
+    if union_sum == 0:
         return 1.0
     
-    return matched_iou_sum / total_union
+    # AJI = sum of intersections / sum of unions
+    return intersection_sum / union_sum
 
 
 def masks_to_boxes(masks):
@@ -322,7 +324,7 @@ def compute_ci(values, confidence=0.95):
 
 
 def compute_segmentation_metrics(predictions, ground_truths, class_names, 
-                               compute_ci=True, n_bootstraps=1000, 
+                               compute_confidence_intervals=True, n_bootstraps=1000, 
                                iou_thresholds=[0.5], score_threshold=0.5):
     """
     Compute comprehensive segmentation metrics with confidence intervals
@@ -331,7 +333,7 @@ def compute_segmentation_metrics(predictions, ground_truths, class_names,
         predictions: List of prediction dictionaries
         ground_truths: List of ground truth dictionaries  
         class_names: List of class names
-        compute_ci: Whether to compute confidence intervals
+        compute_confidence_intervals: Whether to compute confidence intervals
         n_bootstraps: Number of bootstrap samples
         iou_thresholds: List of IoU thresholds
         score_threshold: Score threshold for filtering predictions
@@ -403,14 +405,14 @@ def compute_segmentation_metrics(predictions, ground_truths, class_names,
                 'weighted_precision': 0, 'weighted_recall': 0, 'weighted_f1': 0
             })
         
-        # AJI score
+        # AJI score (already a 0-1 ratio, convert to percentage for display)
         if base_metrics['aji_scores']:
             results['aji'] = np.mean(base_metrics['aji_scores']) * 100
         else:
             results['aji'] = 0.0
         
         # Compute confidence intervals if requested
-        if compute_ci and len(predictions) > 1:
+        if compute_confidence_intervals and len(predictions) > 1:
             print(f"Computing bootstrap confidence intervals with {n_bootstraps} samples...")
             
             bootstrap_precision = [[] for _ in range(len(class_names))]
@@ -427,7 +429,12 @@ def compute_segmentation_metrics(predictions, ground_truths, class_names,
             bootstrap_dices = []
             bootstrap_ajis = []
             
-            for sample_preds, sample_gts in bootstrap_sample(predictions, ground_truths, n_bootstraps):
+            # Add progress bar to bootstrap computation
+            bootstrap_samples = bootstrap_sample(predictions, ground_truths, n_bootstraps)
+            
+            for i, (sample_preds, sample_gts) in enumerate(tqdm(bootstrap_samples, 
+                                                               total=n_bootstraps, 
+                                                               desc="Bootstrap CI")):
                 try:
                     sample_metrics = compute_segmentation_metrics_per_class(
                         sample_preds, sample_gts, class_names, 
@@ -435,10 +442,10 @@ def compute_segmentation_metrics(predictions, ground_truths, class_names,
                     )
                     
                     # Per-class metrics
-                    for i in range(len(class_names)):
-                        bootstrap_precision[i].append(sample_metrics['precision'][i])
-                        bootstrap_recall[i].append(sample_metrics['recall'][i])
-                        bootstrap_f1[i].append(sample_metrics['f1'][i])
+                    for j in range(len(class_names)):
+                        bootstrap_precision[j].append(sample_metrics['precision'][j])
+                        bootstrap_recall[j].append(sample_metrics['recall'][j])
+                        bootstrap_f1[j].append(sample_metrics['f1'][j])
                     
                     # Aggregate metrics
                     valid_classes = sample_metrics['total_gt'] > 0
@@ -473,7 +480,7 @@ def compute_segmentation_metrics(predictions, ground_truths, class_names,
                         bootstrap_ajis.append(np.mean(sample_metrics['aji_scores']) * 100)
                     
                 except Exception as e:
-                    print(f"Warning: Bootstrap sample failed: {e}")
+                    print(f"Warning: Bootstrap sample {i+1} failed: {e}")
                     continue
             
             # Compute confidence intervals

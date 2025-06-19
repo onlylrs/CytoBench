@@ -3,7 +3,7 @@
 # Common settings
 common:
   seed: 42
-  gpu: 4
+  gpu: 6
   num_workers: 4
   disable_progress_bar: false
 
@@ -11,10 +11,11 @@ common:
 data:
   dataset: 'CRIC'  # Will be set based on actual dataset name
   root: '/jhcnas4/jh/cytology/CYTO_task'
+  annotations_dir: ''
 
 # Model configuration
 model:
-  name: 'fasterrcnn_resnet50_fpn'  # Detection model architecture
+  name: 'fasterrcnn_mobilenet_v3_large_fpn'  # Detection model architecture
   pretrained: true
   # Available models:
   # - fasterrcnn_resnet50_fpn
