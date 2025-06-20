@@ -10,7 +10,7 @@ common:
 
 # Backbone settings
 backbone:
-  name: "CLIP"  # Options: ResNet50, CLIP, SigLIP, SigLIP2-ViT-B, SigLIP2-ViT-L, SigLIP2-ViT-SO400M
+  name: "CLIP"  # Available backbones: ResNet50, CLIP, SigLIP, SigLIP2-ViT-B, SigLIP2-ViT-L, SigLIP2-ViT-SO400M
   pretrained: true
   freeze: false
 
@@ -19,7 +19,7 @@ training:
   batch_size: 64
   epochs: 50
   lr: 0.001
-  optimizer: "Adam"
+  optimizer: "Adam"  # Available optimizers: Adam, SGD
   weight_decay: 0.0001
   scheduler: null
 

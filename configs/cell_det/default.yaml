@@ -9,18 +9,14 @@ common:
 
 # Data configuration
 data:
-  dataset: 'CRIC'  # Will be set based on actual dataset name
+  dataset: 'CRIC'  # Available datasets: CRIC (and other detection datasets in CYTO_task folder)
   root: '/jhcnas4/jh/cytology/CYTO_task'
 
 # Model configuration
 model:
-  name: 'fasterrcnn_resnet50_fpn'  # Detection model architecture
+  name: 'fasterrcnn_resnet50_fpn'  # Available models: fasterrcnn_resnet50_fpn, fasterrcnn_mobilenet_v3_large_fpn,
+                                   #                   fasterrcnn_mobilenet_v3_large_320_fpn, retinanet_resnet50_fpn
   pretrained: true
-  # Available models:
-  # - fasterrcnn_resnet50_fpn
-  # - fasterrcnn_mobilenet_v3_large_fpn
-  # - fasterrcnn_mobilenet_v3_large_320_fpn
-  # - retinanet_resnet50_fpn
 
 # Training configuration
 training:

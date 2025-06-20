@@ -10,11 +10,11 @@ common:
 # Data configuration
 data:
   root: '/jhcnas4/jh/cytology/CYTO_task'
-  dataset: 'ISBI2014'
+  dataset: 'ISBI2014'  # Available datasets: ISBI2014 (and other segmentation datasets in CYTO_task folder)
 
 # Model configuration
 model:
-  name: 'maskrcnn_resnet50_fpn'
+  name: 'maskrcnn_resnet50_fpn'  # Available models: maskrcnn_resnet50_fpn (primary segmentation model)
   pretrained: true
 
 # Training configuration

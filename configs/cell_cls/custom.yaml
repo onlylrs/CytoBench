@@ -1,17 +1,18 @@
 # Custom configuration for cell classification
+# This demonstrates how to override specific settings from the default config
 
 # Import base configuration
-_base_: "configs/cell_cls/default.yaml"
+_base_: "default.yaml"
 
 # Override specific settings
 common:
   gpu: 1  # Use different GPU
 
 data:
-  dataset: "HiCervix"  # Use different dataset
+  dataset: "HiCervix"  # Change dataset (see default.yaml for all available options)
 
 backbone:
-  name: "SigLIP"  # Use different backbone model
+  name: "SigLIP"  # Change backbone model (see default.yaml for all available options)
 
 training:
   batch_size: 32  # Smaller batch size

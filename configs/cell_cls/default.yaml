@@ -3,31 +3,34 @@
 # Common settings
 common:
   seed: 42
-  gpu: 4
+  gpu: 6
   num_workers: 4
   disable_progress_bar: false
 
 # Data settings
 data:
-  dataset: "SIPaKMeD"  # Options: Herlev, HiCervix, JinWooChoi, FNAC2019, LDCC, SIPaKMeD, Barcelona, BCI, BCFCI, BMCC
+  dataset: "Herlev"  # Available datasets: All-IDB, AML, Ascites2020, Barcelona, BCFC, BCI, BMC, BMT,
+                     #                    Breast2023, C_NMC_2019, CCS_Cell_Cls, CERVIX93, CSF2022, FNAC2019,
+                     #                    Herlev, HiCervix, JinWooChoi, LDCC, MendeleyLBC, PS3C, Raabin_WBC,
+                     #                    RepoMedUNM, SIPaKMeD, Thyroid2024, UFSC_OCPap
 
 # Model settings
 model:
-  feature_dim: 768  # Feature dimension from backbone
+  feature_dim: 768  # Feature dimension from backbone (auto-detected if set to 0)
 
 # Backbone settings
 backbone:
-  name: "ResNet50"  # Options: ResNet50, CLIP, SigLIP, SigLIP2-ViT-B, SigLIP2-ViT-L, SigLIP2-ViT-SO400M
+  name: "ResNet50"  # Available backbones: ResNet50, CLIP, SigLIP, SigLIP2-ViT-B, SigLIP2-ViT-L, SigLIP2-ViT-SO400M
   pretrained: true
   freeze: true
 
 # Training settings
 training:
   batch_size: 64
-  epochs: 5
+  epochs: 50
   lr: 0.001
   weight_decay: 0.0001
-  optimizer: "Adam"
+  optimizer: "Adam"  # Available optimizers: Adam, SGD
   scheduler: null
 
 # Evaluation settings

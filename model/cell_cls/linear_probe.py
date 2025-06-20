@@ -10,7 +10,7 @@ class LinearProbeModel(nn.Module):
         num_classes: Number of output classes
         freeze_backbone: Whether to freeze the backbone parameters
     """
-    def __init__(self, backbone, num_classes, freeze_backbone=True):
+    def __init__(self, backbone, num_classes, freeze_backbone=False):
         super().__init__()
         self.backbone = backbone
         

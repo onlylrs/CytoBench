@@ -29,12 +29,21 @@ def build_backbone(config):
     # Build model based on name
     if model_name == 'ResNet50':
         # For API consistency, get preprocess from CLIP
-        _, _, preprocess = open_clip.create_model_and_transforms(
-            'ViT-L-14', 
-            pretrained=os.path.join(ckpt_root, '2025_04_21-15_22_04-model_ViT-L-14-lr_0.0005-b_64-j_4-p_amp/checkpoints/epoch_40.pt')
-        )
-        # Build ResNet50 feature extractor
-        model = ResNetFeatureExtractor(pretrained=config['backbone']['pretrained'])
+        # _, _, preprocess = open_clip.create_model_and_transforms(
+        #     'ViT-L-14', 
+        #     pretrained=os.path.join(ckpt_root, '2025_04_21-15_22_04-model_ViT-L-14-lr_0.0005-b_64-j_4-p_amp/checkpoints/epoch_40.pt')
+        # )
+        # # Build ResNet50 feature extractor
+        # model = ResNetFeatureExtractor(pretrained=config['backbone']['pretrained'])
+        _, _, preprocess = open_clip.create_model_and_transforms('ViT-L-14', pretrained=os.path.join(ckpt_root, '2025_04_21-15_22_04-model_ViT-L-14-lr_0.0005-b_64-j_4-p_amp/checkpoints/epoch_40.pt')) # for API consistency
+        # Load ResNet50 and create feature extractor (remove final classification layer)
+        full_model = torch.hub.load('pytorch/vision:v0.22.0', 'resnet50', pretrained=True)
+        # Create feature extractor by removing the final fc layer
+        model = torch.nn.Sequential(*list(full_model.children())[:-1])  # Remove final fc layer
+        # Add global average pooling to flatten features
+        model.add_module('flatten', torch.nn.Flatten())
+
+        
     elif model_name == 'CLIP':
         model, _, preprocess = open_clip.create_model_and_transforms(
             'ViT-L-14', 
