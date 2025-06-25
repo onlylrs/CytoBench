@@ -4,6 +4,8 @@ from torch.utils.data import Dataset
 import PIL.Image as Image
 import json
 import numpy as np
+from sklearn.model_selection import StratifiedKFold
+import random
 
 # Dataset-specific label file paths configuration
 DATASET_LABEL_PATHS = {
@@ -57,10 +59,10 @@ DATASET_LABEL_PATHS = {
         'val': '/jhcnas4/jh/cytology/CYTO_task/C_NMC_2019/val.txt',
         'test': '/jhcnas4/jh/cytology/CYTO_task/C_NMC_2019/test.txt'  
     },
-    'CCS_Cell_Cls': {
-        'train': '/jhcnas4/jh/cytology/CYTO_task/CCS_Cell_Cls/train.txt',  
-        'val': '/jhcnas4/jh/cytology/CYTO_task/CCS_Cell_Cls/val.txt',
-        'test': '/jhcnas4/jh/cytology/CYTO_task/CCS_Cell_Cls/test.txt'  
+    'CCS-Cell-Cls': {
+        'train': '/jhcnas4/jh/cytology/CYTO_task/CCS-Cell-Cls/train.txt',  
+        'val': '/jhcnas4/jh/cytology/CYTO_task/CCS-Cell-Cls/val.txt',
+        'test': '/jhcnas4/jh/cytology/CYTO_task/CCS-Cell-Cls/test.txt'  
     },
     'CERVIX93': {
         'train': '/jhcnas4/jh/cytology/CYTO_task/CERVIX93/train.txt',  
@@ -143,26 +145,39 @@ class CellClsDataset(Dataset):
         preprocess (callable): Preprocessing function for images
         split (str): Dataset split ('train', 'val', or 'test')
         root (str, optional): Root directory of the dataset (fallback if dataset_name not in DATASET_LABEL_PATHS)
+        cv_fold (int, optional): Cross validation fold number (None for regular train/val/test split)
+        cv_total_folds (int, optional): Total number of cross validation folds
+        cv_seed (int, optional): Random seed for cross validation splits
     """
-    def __init__(self, dataset_name, preprocess, split='train', root=None):
+    def __init__(self, dataset_name, preprocess, split='train', root=None,
+                 cv_fold=None, cv_total_folds=None, cv_seed=42):
         self.dataset_name = dataset_name
         self.preprocess = preprocess
         self.split = split
         self.root = root
+        self.cv_fold = cv_fold
+        self.cv_total_folds = cv_total_folds
+        self.cv_seed = cv_seed
 
         # Set task type
         self.task_type = "cls"
 
         # Load dataset metadata
-        self.metadata_path = self._get_metadata_path()
-        if self.metadata_path and os.path.exists(self.metadata_path):
-            self.metadata = self._load_metadata_from_file()
+        if cv_fold is not None and cv_total_folds is not None:
+            # Cross validation mode: load all data and split by fold
+            self.metadata = self._load_all_metadata_for_cv()
+            self.label_dict = self._get_label_dict()
+            self.metadata = self._get_cv_split_metadata()
         else:
-            # If metadata file doesn't exist, scan the directory structure
-            self.metadata = self._create_metadata()
-
-        # Get class labels
-        self.label_dict = self._get_label_dict()
+            # Regular mode: load specific split
+            self.metadata_path = self._get_metadata_path()
+            if self.metadata_path and os.path.exists(self.metadata_path):
+                self.metadata = self._load_metadata_from_file()
+            else:
+                # If metadata file doesn't exist, scan the directory structure
+                self.metadata = self._create_metadata()
+            # Get class labels
+            self.label_dict = self._get_label_dict()
 
     def _get_metadata_path(self):
         """Get the metadata file path based on dataset configuration"""
@@ -244,7 +259,103 @@ class CellClsDataset(Dataset):
                 })
 
         return metadata
-    
+
+    def _load_all_metadata_for_cv(self):
+        """Load all metadata from train/val/test splits for cross validation"""
+        all_metadata = []
+
+        # Load from all splits
+        for split in ['train', 'val', 'test']:
+            try:
+                # Get metadata path for this split
+                if self.dataset_name and self.dataset_name in DATASET_LABEL_PATHS:
+                    split_path = DATASET_LABEL_PATHS[self.dataset_name].get(split, '')
+                    if split_path and split_path.strip() and os.path.exists(split_path):
+                        # Load metadata from this split file
+                        with open(split_path, 'r') as f:
+                            lines = f.readlines()
+
+                        # Extract root directory if not provided
+                        if not self.root:
+                            metadata_dir = os.path.dirname(split_path)
+                            self.root = metadata_dir
+
+                        for line in lines:
+                            parts = line.strip().split()
+                            if len(parts) >= 2:
+                                # Handle both absolute and relative paths
+                                image_rel_path = parts[0]
+                                if os.path.isabs(image_rel_path):
+                                    image_path = image_rel_path
+                                else:
+                                    image_path = os.path.join(self.root, image_rel_path)
+
+                                label = parts[-1]
+                                all_metadata.append({
+                                    'image_path': image_path,
+                                    'label': label,
+                                    'original_split': split
+                                })
+            except Exception as e:
+                print(f"Warning: Could not load {split} split for cross validation: {e}")
+
+        if not all_metadata:
+            raise ValueError(f"No data found for cross validation for dataset '{self.dataset_name}'")
+
+        return all_metadata
+
+    def _get_cv_split_metadata(self):
+        """Get metadata for specific cross validation fold"""
+        if self.cv_fold is None or self.cv_total_folds is None:
+            return self.metadata
+
+        # Extract labels and data
+        labels = [item['label'] for item in self.metadata]
+
+        # Create stratified k-fold splits
+        skf = StratifiedKFold(n_splits=self.cv_total_folds, shuffle=True, random_state=self.cv_seed)
+
+        # Get fold indices
+        fold_indices = list(skf.split(range(len(self.metadata)), labels))
+
+        if self.cv_fold >= len(fold_indices):
+            raise ValueError(f"cv_fold {self.cv_fold} is out of range for {self.cv_total_folds} folds")
+
+        train_indices, test_indices = fold_indices[self.cv_fold]
+
+        if self.split == 'train':
+            # For training, use all folds except the current test fold
+            selected_indices = train_indices
+        elif self.split == 'test':
+            # For testing, use the current test fold
+            selected_indices = test_indices
+        elif self.split == 'val':
+            # For validation, use a portion of the training data
+            # Split training data further: 80% train, 20% val
+            np.random.seed(self.cv_seed + self.cv_fold)  # Different seed per fold
+            val_size = max(1, len(train_indices) // 5)  # 20% for validation
+
+            # Ensure stratified sampling for validation set
+            train_labels = [labels[i] for i in train_indices]
+            unique_labels = list(set(train_labels))
+            val_indices = []
+
+            for label in unique_labels:
+                label_indices = [train_indices[i] for i, l in enumerate(train_labels) if l == label]
+                if len(label_indices) > 0:
+                    # Take at least 1 sample per class, or proportional amount
+                    n_val_for_class = max(1, len(label_indices) // 5)
+                    np.random.seed(self.cv_seed + self.cv_fold + hash(label) % 1000)
+                    selected = np.random.choice(label_indices, size=min(n_val_for_class, len(label_indices)), replace=False)
+                    val_indices.extend(selected)
+
+            selected_indices = val_indices
+        else:
+            raise ValueError(f"Unknown split: {self.split}")
+
+        # Return selected metadata
+        return [self.metadata[i] for i in selected_indices]
+
     def _get_label_dict(self):
         """Create a dictionary mapping class names to indices"""
         labels = sorted(list(set([item['label'] for item in self.metadata])))
@@ -355,3 +466,105 @@ def build_cell_cls_dataloaders(config):
         }
     
     return dataloaders
+
+def build_cv_dataloaders(config, fold):
+    """
+    Build dataloaders for cross validation
+
+    Args:
+        config (dict): Configuration dictionary containing dataset settings
+        fold (int): Current fold number
+
+    Returns:
+        dict: Dictionary containing train, val, test dataloaders and metadata
+    """
+    from torch.utils.data import DataLoader
+    from backbone.build_model import build_backbone, auto_set_feature_dim
+
+    # Auto-set feature_dim based on backbone name
+    config = auto_set_feature_dim(config)
+
+    # Build backbone to get preprocessing function
+    _, preprocess = build_backbone(config)
+
+    # Get dataset name
+    dataset_name = config['data']['dataset']
+
+    # Get cross validation settings
+    cv_config = config.get('evaluation', {})
+    total_folds = cv_config.get('cv_folds', 5)
+    cv_seed = cv_config.get('cv_seed', 42)
+
+    # Get root directory if provided in config (fallback)
+    dataset_root = None
+    if 'root' in config.get('data', {}):
+        dataset_root = os.path.join(config['data']['root'], dataset_name)
+
+    # Create datasets for each split with cross validation
+    train_dataset = CellClsDataset(
+        dataset_name=dataset_name,
+        preprocess=preprocess,
+        split='train',
+        root=dataset_root,
+        cv_fold=fold,
+        cv_total_folds=total_folds,
+        cv_seed=cv_seed
+    )
+
+    val_dataset = CellClsDataset(
+        dataset_name=dataset_name,
+        preprocess=preprocess,
+        split='val',
+        root=dataset_root,
+        cv_fold=fold,
+        cv_total_folds=total_folds,
+        cv_seed=cv_seed
+    )
+
+    test_dataset = CellClsDataset(
+        dataset_name=dataset_name,
+        preprocess=preprocess,
+        split='test',
+        root=dataset_root,
+        cv_fold=fold,
+        cv_total_folds=total_folds,
+        cv_seed=cv_seed
+    )
+
+    # Create dataloaders
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=config['training']['batch_size'],
+        shuffle=True,
+        num_workers=config['common']['num_workers'],
+        pin_memory=True
+    )
+
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=config['evaluation']['batch_size'],
+        shuffle=False,
+        num_workers=config['common']['num_workers'],
+        pin_memory=True
+    )
+
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=config['evaluation']['batch_size'],
+        shuffle=False,
+        num_workers=config['common']['num_workers'],
+        pin_memory=True
+    )
+
+    return {
+        'train': train_loader,
+        'val': val_loader,
+        'test': test_loader,
+        'num_classes': len(train_dataset.label_dict),
+        'label_dict': train_dataset.label_dict,
+        'fold': fold,
+        'total_folds': total_folds,
+        'train_size': len(train_dataset),
+        'val_size': len(val_dataset),
+        'test_size': len(test_dataset)
+    }

@@ -1,0 +1,20 @@
+# Cross Validation configuration
+# Enable 5-fold cross validation for robust evaluation
+
+_base_: "base_config.yaml"
+
+# Enable cross validation
+evaluation:
+  cv_enabled: true
+  cv_folds: 5
+  metrics:
+    - "accuracy"
+    - "auc"
+    - "macro_f1"
+    - "macro_precision"
+    - "macro_recall"
+
+# Output to separate CV directory
+output:
+  model_dir: "checkpoints/cell_cls_cv"
+  results_dir: "results/cell_cls_cv"

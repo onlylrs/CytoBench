@@ -3,6 +3,48 @@ import torch
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from sklearn.metrics import roc_auc_score, confusion_matrix
 
+def compute_sensitivity_specificity(y_true, y_pred, num_classes):
+    """
+    Compute sensitivity (recall/TPR) and specificity (TNR) for each class
+
+    Args:
+        y_true: Ground truth labels
+        y_pred: Predicted labels
+        num_classes: Number of classes
+
+    Returns:
+        sensitivity: Array of sensitivity values for each class
+        specificity: Array of specificity values for each class
+    """
+    cm = confusion_matrix(y_true, y_pred, labels=range(num_classes))
+
+    sensitivity = np.zeros(num_classes)
+    specificity = np.zeros(num_classes)
+
+    for i in range(num_classes):
+        # True Positives
+        tp = cm[i, i]
+        # False Negatives
+        fn = np.sum(cm[i, :]) - tp
+        # False Positives
+        fp = np.sum(cm[:, i]) - tp
+        # True Negatives
+        tn = np.sum(cm) - tp - fn - fp
+
+        # Sensitivity (Recall/TPR) = TP / (TP + FN)
+        if tp + fn > 0:
+            sensitivity[i] = tp / (tp + fn)
+        else:
+            sensitivity[i] = 0.0
+
+        # Specificity (TNR) = TN / (TN + FP)
+        if tn + fp > 0:
+            specificity[i] = tn / (tn + fp)
+        else:
+            specificity[i] = 0.0
+
+    return sensitivity * 100, specificity * 100
+
 def bootstrap_ci(data, metric_func, n_bootstraps=1000, ci=95):
     """
     Compute bootstrap confidence intervals for a metric
@@ -127,11 +169,16 @@ def compute_classification_metrics(y_true, y_pred, y_score=None, class_names=Non
     precision, recall, f1, support = precision_recall_fscore_support(
         y_true, y_pred, labels=range(num_classes), average=None, zero_division=0
     )
-    
+
     metrics['precision'] = precision * 100
     metrics['recall'] = recall * 100
     metrics['f1'] = f1 * 100
     metrics['support'] = support
+
+    # Compute sensitivity and specificity
+    sensitivity, specificity = compute_sensitivity_specificity(y_true, y_pred, num_classes)
+    metrics['sensitivity'] = sensitivity
+    metrics['specificity'] = specificity
     
     # Compute confidence intervals for precision, recall, F1 if requested
     if compute_ci:
@@ -176,15 +223,43 @@ def compute_classification_metrics(y_true, y_pred, y_score=None, class_names=Non
             f1_ci.append((lower, upper))
         
         metrics['f1_ci'] = f1_ci
+
+        # Sensitivity CI
+        sensitivity_ci = []
+        for class_idx in range(num_classes):
+            def sensitivity_func(y_true, y_pred):
+                sens, _ = compute_sensitivity_specificity(y_true, y_pred, num_classes)
+                return sens[class_idx]
+
+            lower, upper = bootstrap_ci((y_pred, y_true), sensitivity_func, n_bootstraps)
+            sensitivity_ci.append((lower, upper))
+
+        metrics['sensitivity_ci'] = sensitivity_ci
+
+        # Specificity CI
+        specificity_ci = []
+        for class_idx in range(num_classes):
+            def specificity_func(y_true, y_pred):
+                _, spec = compute_sensitivity_specificity(y_true, y_pred, num_classes)
+                return spec[class_idx]
+
+            lower, upper = bootstrap_ci((y_pred, y_true), specificity_func, n_bootstraps)
+            specificity_ci.append((lower, upper))
+
+        metrics['specificity_ci'] = specificity_ci
     
     # Compute macro and weighted averages
     metrics['macro_precision'] = np.mean(metrics['precision'])
     metrics['macro_recall'] = np.mean(metrics['recall'])
     metrics['macro_f1'] = np.mean(metrics['f1'])
-    
+    metrics['macro_sensitivity'] = np.mean(metrics['sensitivity'])
+    metrics['macro_specificity'] = np.mean(metrics['specificity'])
+
     metrics['weighted_precision'] = np.average(metrics['precision'], weights=support)
     metrics['weighted_recall'] = np.average(metrics['recall'], weights=support)
     metrics['weighted_f1'] = np.average(metrics['f1'], weights=support)
+    metrics['weighted_sensitivity'] = np.average(metrics['sensitivity'], weights=support)
+    metrics['weighted_specificity'] = np.average(metrics['specificity'], weights=support)
     
     # Compute confidence intervals for macro and weighted averages if requested
     if compute_ci:
@@ -247,6 +322,44 @@ def compute_classification_metrics(y_true, y_pred, y_score=None, class_names=Non
         
         lower, upper = bootstrap_ci((y_pred, y_true), weighted_f1_func, n_bootstraps)
         metrics['weighted_f1_ci'] = (lower, upper)
+
+        # Macro sensitivity CI
+        def macro_sensitivity_func(y_true, y_pred):
+            sens, _ = compute_sensitivity_specificity(y_true, y_pred, num_classes)
+            return np.mean(sens)
+
+        lower, upper = bootstrap_ci((y_pred, y_true), macro_sensitivity_func, n_bootstraps)
+        metrics['macro_sensitivity_ci'] = (lower, upper)
+
+        # Macro specificity CI
+        def macro_specificity_func(y_true, y_pred):
+            _, spec = compute_sensitivity_specificity(y_true, y_pred, num_classes)
+            return np.mean(spec)
+
+        lower, upper = bootstrap_ci((y_pred, y_true), macro_specificity_func, n_bootstraps)
+        metrics['macro_specificity_ci'] = (lower, upper)
+
+        # Weighted sensitivity CI
+        def weighted_sensitivity_func(y_true, y_pred):
+            sens, _ = compute_sensitivity_specificity(y_true, y_pred, num_classes)
+            _, _, _, support = precision_recall_fscore_support(
+                y_true, y_pred, labels=range(num_classes), average=None, zero_division=0
+            )
+            return np.average(sens, weights=support)
+
+        lower, upper = bootstrap_ci((y_pred, y_true), weighted_sensitivity_func, n_bootstraps)
+        metrics['weighted_sensitivity_ci'] = (lower, upper)
+
+        # Weighted specificity CI
+        def weighted_specificity_func(y_true, y_pred):
+            _, spec = compute_sensitivity_specificity(y_true, y_pred, num_classes)
+            _, _, _, support = precision_recall_fscore_support(
+                y_true, y_pred, labels=range(num_classes), average=None, zero_division=0
+            )
+            return np.average(spec, weights=support)
+
+        lower, upper = bootstrap_ci((y_pred, y_true), weighted_specificity_func, n_bootstraps)
+        metrics['weighted_specificity_ci'] = (lower, upper)
     
     # Compute AUC if scores are provided
     if y_score is not None:

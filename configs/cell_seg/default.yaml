@@ -20,7 +20,7 @@ data:
 
 # Model configuration
 model:
-  name: 'maskrcnn_resnet50_fpn'
+  name: 'maskrcnn_resnet50_fpn'  # Available models: maskrcnn_resnet50_fpn (primary segmentation model)
   pretrained: true
 
 # Training configuration
