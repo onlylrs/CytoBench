@@ -10,7 +10,13 @@ common:
 # Data configuration
 data:
   root: '/jhcnas4/jh/cytology/CYTO_task'
-  dataset: 'ISBI2014'  # Available datasets: ISBI2014 (and other segmentation datasets in CYTO_task folder)
+  dataset: 'ISBI2014'
+  annotations_dir: ''
+  # Category ID offset for different dataset class labeling schemes
+  # - Set to 1 if dataset categories start from 0 (e.g., ISBI2014: Cell=0, Nuclei=1)
+  # - Set to 0 if dataset categories already start from 1 
+  # - Adjust as needed for other datasets
+  category_id_offset: 1
 
 # Model configuration
 model:
@@ -37,7 +43,7 @@ evaluation:
   iou_thresholds: [0.5]
   score_threshold: 0.5
   compute_ci: true
-  n_bootstraps: 50
+  n_bootstraps: 10
   metrics:
     - 'precision'
     - 'recall'
@@ -49,5 +55,5 @@ evaluation:
 
 # Output configuration
 output:
-  model_dir: './models/cell_seg'
+  model_dir: './checkpoints/cell_seg'
   results_dir: './results/cell_seg' 

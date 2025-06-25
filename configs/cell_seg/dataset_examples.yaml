@@ -1,0 +1,28 @@
+# Example configurations for different datasets and their class labeling schemes
+
+# Example 1: ISBI2014 dataset
+# Categories in JSON: {"id": 0, "name": "Cell"}, {"id": 1, "name": "Nuclei"}
+# Needs offset of 1 to map to model classes 1, 2
+ISBI2014_config:
+  data:
+    dataset: 'ISBI2014'
+    category_id_offset: 1  # 0->1, 1->2
+
+# Example 2: Dataset with categories starting from 1
+# Categories in JSON: {"id": 1, "name": "Cell"}, {"id": 2, "name": "Nuclei"}  
+# No offset needed
+standard_config:
+  data:
+    dataset: 'StandardDataset'
+    category_id_offset: 0  # 1->1, 2->2
+
+# Example 3: Dataset with non-standard category IDs
+# Categories in JSON: {"id": 5, "name": "Cell"}, {"id": 10, "name": "Nuclei"}
+# Need negative offset to map to 1, 2
+custom_config:
+  data:
+    dataset: 'CustomDataset'
+    category_id_offset: -4  # 5->1, 10->6 (needs custom mapping function)
+
+# For complex mappings, you might need to implement a category_id_mapping dict instead:
+# category_id_mapping: {5: 1, 10: 2}  # Map original_id -> model_id 

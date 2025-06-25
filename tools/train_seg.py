@@ -156,19 +156,29 @@ def train(config):
     
     print(f"Loading datasets from {dataset_root}")
     
+    # Get annotations directory and category ID offset from config
+    annotations_dir = config['data'].get('annotations_dir', None)
+    category_id_offset = config['data'].get('category_id_offset', 1)
+    
     train_dataset = CellSegDataset(
         root=dataset_root,
-        split='train'
+        split='train',
+        annotations_dir=annotations_dir,
+        category_id_offset=category_id_offset
     )
     
     val_dataset = CellSegDataset(
         root=dataset_root,
-        split='val'
+        split='val',
+        annotations_dir=annotations_dir,
+        category_id_offset=category_id_offset
     )
     
     test_dataset = CellSegDataset(
         root=dataset_root,
-        split='test'
+        split='test',
+        annotations_dir=annotations_dir,
+        category_id_offset=category_id_offset
     )
     
     # Create data loaders
@@ -267,7 +277,7 @@ def train(config):
                     val_predictions, 
                     val_ground_truths, 
                     class_names,
-                    compute_ci=False,  # Skip CI for validation to save time
+                    compute_confidence_intervals=False,  # Skip CI for validation to save time
                     iou_thresholds=config['evaluation']['iou_thresholds'],
                     score_threshold=config['evaluation']['score_threshold']
                 )
@@ -331,7 +341,7 @@ def train(config):
         test_predictions,
         test_ground_truths,
         class_names,
-        compute_ci=compute_ci,
+        compute_confidence_intervals=compute_ci,
         n_bootstraps=n_bootstraps,
         iou_thresholds=config['evaluation']['iou_thresholds'],
         score_threshold=config['evaluation']['score_threshold']
