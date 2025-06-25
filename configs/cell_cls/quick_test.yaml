@@ -1,0 +1,26 @@
+# Quick test configuration
+# Fast settings for testing and debugging
+
+_base_: "base_config.yaml"
+
+# Use lightweight model and fast settings
+common:
+  gpu: 4
+backbone:
+  name: "ccs"
+  freeze: true
+
+data:
+  dataset: "Herlev" 
+
+training:
+  batch_size: 32
+  epochs: 50
+
+evaluation:
+  batch_size: 32
+  compute_ci: true
+  metrics:
+    - "accuracy"
+    - "auc"
+    - "macro_f1"

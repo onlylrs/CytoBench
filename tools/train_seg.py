@@ -354,22 +354,6 @@ def train(config):
     
     print(f"Results saved to {results_path}")
     
-    # Generate timestamp for table filenames
-    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    
-    # Generate placeholder table paths (actual table generation can be implemented later)
-    table_metrics = ['map_50', 'macro_f1', 'dice', 'aji']
-    for metric in table_metrics:
-        csv_path = f'results/table_{metric}{ci_suffix}_{timestamp}.csv'
-        latex_path = f'results/table_{metric}{ci_suffix}_{timestamp}.tex'
-        print(f"CSV table saved to {csv_path}")
-        print(f"LaTeX table saved to {latex_path}")
-    
-    combined_csv_path = f'results/table_combined{ci_suffix}_{timestamp}.csv'
-    combined_latex_path = f'results/table_combined{ci_suffix}_{timestamp}.tex'
-    print(f"Combined CSV table saved to {combined_csv_path}")
-    print(f"Combined LaTeX table saved to {combined_latex_path}")
-    
     return {
         'model': model,
         'metrics': metrics

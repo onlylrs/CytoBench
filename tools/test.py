@@ -14,6 +14,27 @@ from model.cell_cls.linear_probe import LinearProbeModel
 from data.cell_cls.dataset import CellClsDataset
 from evaluation.cell_cls.metrics import compute_classification_metrics
 
+def generate_experiment_name(backbone_name, dataset_name, timestamp=None):
+    """
+    Generate consistent experiment name for all files (checkpoints, results, logs)
+
+    Args:
+        backbone_name: Name of the backbone model
+        dataset_name: Name of the dataset
+        timestamp: Optional timestamp string, if None will generate current time
+
+    Returns:
+        experiment_name: Formatted name string
+    """
+    import datetime
+    if timestamp is None:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Clean backbone name (remove special characters)
+    clean_backbone = backbone_name.replace('-', '_').replace('/', '_')
+
+    return f"{clean_backbone}_{dataset_name}_{timestamp}"
+
 def parse_args():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description='Testing script')
@@ -55,7 +76,8 @@ def setup_model_and_data(config, checkpoint_path, device):
     # Build model
     num_classes = len(test_dataset.label_dict)
     feature_dim = config['model'].get('feature_dim', 0)  # Use 0 as default to auto-detect
-    model = LinearProbeModel(backbone, num_classes, feature_dim)
+    dropout_p = config['model'].get('dropout_p', 0.5)  # Default dropout probability
+    model = LinearProbeModel(backbone, num_classes, feature_dim, dropout_p=dropout_p)
     
     # Load checkpoint
     print(f"Loading checkpoint from {checkpoint_path}")
@@ -173,17 +195,17 @@ def save_results(formatted_results, config, checkpoint_path, compute_ci):
     """Save formatted results to file"""
     results_dir = os.path.join(config['output'].get('results_dir', 'results'))
     os.makedirs(results_dir, exist_ok=True)
-    
-    # Extract model name from checkpoint path
+
+    # Extract model name from checkpoint path (should already be in correct format)
     checkpoint_name = os.path.basename(checkpoint_path).split('.')[0]
-    
+
     # Add suffix for confidence intervals
     ci_suffix = "_with_ci" if compute_ci else ""
     results_path = os.path.join(results_dir, f"{checkpoint_name}{ci_suffix}_test_metrics.txt")
-    
+
     with open(results_path, 'w') as f:
         f.write(formatted_results)
-    
+
     print(f"Results saved to {results_path}")
 
 def test(config, checkpoint_path):
