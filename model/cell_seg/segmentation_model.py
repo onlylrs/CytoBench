@@ -1,23 +1,68 @@
 import torch
 import torch.nn as nn
-from torchvision.models.detection import maskrcnn_resnet50_fpn
+from torchvision.models.detection import maskrcnn_resnet50_fpn, MaskRCNN_ResNet50_FPN_Weights
 from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 import torchvision.transforms as T
 
 
+def freeze_backbone_parameters(model):
+    """
+    Freeze backbone parameters for linear probing
+
+    Args:
+        model: Mask R-CNN model
+    """
+    # Freeze backbone (ResNet50 + FPN)
+    for param in model.backbone.parameters():
+        param.requires_grad = False
+
+    print("🔒 Frozen backbone parameters for linear probing")
+
+    # Print parameter statistics
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    frozen_params = total_params - trainable_params
+
+    print(f"   Total parameters: {total_params:,}")
+    print(f"   Trainable parameters: {trainable_params:,} ({100*trainable_params/total_params:.1f}%)")
+    print(f"   Frozen parameters: {frozen_params:,} ({100*frozen_params/total_params:.1f}%)")
+
+
+def unfreeze_backbone_parameters(model):
+    """
+    Unfreeze backbone parameters for fine-tuning
+
+    Args:
+        model: Mask R-CNN model
+    """
+    # Unfreeze backbone (ResNet50 + FPN)
+    for param in model.backbone.parameters():
+        param.requires_grad = True
+
+    print("🔓 Unfrozen backbone parameters for fine-tuning")
+
+    # Print parameter statistics
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+    print(f"   Total parameters: {total_params:,}")
+    print(f"   Trainable parameters: {trainable_params:,} ({100*trainable_params/total_params:.1f}%)")
 
 
 
-def build_segmentation_model(model_name, num_classes, pretrained=True):
+
+
+def build_segmentation_model(model_name, num_classes, pretrained=True, freeze_backbone=False):
     """
     Build segmentation model based on model name
-    
+
     Args:
         model_name (str): Name of the model (only 'maskrcnn_resnet50_fpn' supported)
         num_classes (int): Number of classes (including background)
         pretrained (bool): Whether to use pretrained weights
-    
+        freeze_backbone (bool): Whether to freeze backbone parameters for linear probing
+
     Returns:
         torch.nn.Module: Mask R-CNN segmentation model
     """
@@ -25,7 +70,10 @@ def build_segmentation_model(model_name, num_classes, pretrained=True):
     
     if model_name == 'maskrcnn_resnet50_fpn':
         # Mask R-CNN with ResNet-50 FPN backbone
-        model = maskrcnn_resnet50_fpn(pretrained=pretrained)
+        if pretrained:
+            model = maskrcnn_resnet50_fpn(weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
+        else:
+            model = maskrcnn_resnet50_fpn(weights=None)
         
         # Replace the classifier heads
         # Box predictor
@@ -36,7 +84,11 @@ def build_segmentation_model(model_name, num_classes, pretrained=True):
         in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
         hidden_layer = 256
         model.roi_heads.mask_predictor = MaskRCNNPredictor(in_features_mask, hidden_layer, num_classes)
-        
+
+        # Freeze backbone if requested
+        if freeze_backbone:
+            freeze_backbone_parameters(model)
+
         return model
     
     else:

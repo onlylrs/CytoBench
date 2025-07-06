@@ -7,7 +7,7 @@ _base_: "base_config.yaml"
 common:
   gpu: 4
 backbone:
-  name: "ccs"
+  name: "ViT-L-16"
   freeze: true
 
 data:
@@ -24,3 +24,7 @@ evaluation:
     - "accuracy"
     - "auc"
     - "macro_f1"
+
+output:
+  model_dir: "/jhcnas2/home/jh/CARE/checkpoints/cell_cls/ccs/VITL_unfrozen"
+  results_dir: "results/cell_cls/VITL_unfrozen"

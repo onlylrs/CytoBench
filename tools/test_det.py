@@ -37,9 +37,20 @@ def setup_model_and_data(config, checkpoint_path, device):
     dataset_name = config['data']['dataset']
     dataset_root = os.path.join(config['data']['root'], dataset_name)
     
+    # Get image preprocessing configuration
+    image_config = config['data']
+    image_size = image_config.get('image_size', None)
+    if image_size is not None:
+        image_size = tuple(image_size)  # Convert list to tuple
+    keep_aspect_ratio = image_config.get('keep_aspect_ratio', True)
+    normalize = image_config.get('normalize', True)
+    
     test_dataset = CellDetDataset(
         root=dataset_root,
-        split='test'
+        split='test',
+        image_size=image_size,
+        keep_aspect_ratio=keep_aspect_ratio,
+        normalize=normalize
     )
     
     # Create data loader

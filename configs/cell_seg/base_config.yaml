@@ -1,0 +1,62 @@
+# Default configuration for cell segmentation
+
+# Common settings
+common:
+  seed: 42
+  gpu: 2
+  num_workers: 4
+  disable_progress_bar: false
+
+# Data configuration
+data:
+  root: '/jhcnas4/jh/cytology/CYTO_task'
+  dataset: 'Herlev'
+  annotations_dir: '/jhcnas4/jh/cytology/CYTO_task/Herlev/seg'
+  # Category ID offset for different dataset class labeling schemes
+  # - Set to 1 if dataset categories start from 0 (e.g., ISBI2014: Cell=0, Nuclei=1)
+  # - Set to 0 if dataset categories already start from 1 
+  # - Adjust as needed for other datasets
+  category_id_offset: 0
+
+# Model configuration
+model:
+  name: 'maskrcnn_resnet50_fpn'  # Available models: maskrcnn_resnet50_fpn (primary segmentation model)
+  pretrained: true
+  freeze_backbone: true  # Set to true for linear probing (freeze backbone), false for fine-tuning
+
+# Training configuration
+training:
+  epochs: 2
+  batch_size: 2
+  lr: 0.001
+  momentum: 0.9
+  weight_decay: 0.0005
+  validation_frequency: 1 #5
+  
+  lr_scheduler:
+    type: 'StepLR'
+    step_size: 16
+    gamma: 0.1
+
+# Evaluation configuration
+evaluation:
+  batch_size: 4
+  # This list is now only for calculating TP/FP/FN for Precision/Recall/F1.
+  # The COCO mAP calculation uses its own standard range of [0.50:0.05:0.95].
+  iou_thresholds: [0.5, 0.75]
+  score_threshold: 0.5
+  compute_ci: true
+  n_bootstraps: 1 # Increased for more stable CI, can be lowered for speed
+  metrics:
+    - 'mAP'
+    - 'mAP_50'
+    - 'mAP_75'
+    - 'aji'
+    - 'macro_f1'
+    - 'precision_per_class'
+    - 'recall_per_class'
+
+# Output configuration
+output:
+  model_dir: './checkpoints/cell_seg'
+  results_dir: './results/cell_seg' 

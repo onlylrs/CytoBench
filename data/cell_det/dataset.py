@@ -8,6 +8,84 @@ from pycocotools.coco import COCO
 import numpy as np
 
 
+def create_detection_transform(image_size=None, keep_aspect_ratio=True, normalize=True):
+    """
+    Create detection preprocessing transform with resizing and bbox handling
+    
+    Args:
+        image_size (tuple, optional): Target size (height, width) for resizing
+        keep_aspect_ratio (bool): Whether to maintain aspect ratio when resizing
+        normalize (bool): Whether to normalize pixel values
+        
+    Returns:
+        callable: Transform function
+    """
+    def transform(image, boxes=None):
+        # Get original image size
+        original_width, original_height = image.size
+        
+        # Apply resizing if specified
+        if image_size is not None:
+            target_height, target_width = image_size
+            
+            if keep_aspect_ratio:
+                # Calculate scale to fit image in target size while keeping aspect ratio
+                scale_w = target_width / original_width
+                scale_h = target_height / original_height
+                scale = min(scale_w, scale_h)
+                
+                new_width = int(original_width * scale)
+                new_height = int(original_height * scale)
+                
+                # Resize image
+                image = image.resize((new_width, new_height), Image.BILINEAR)
+                
+                # Create new image with target size and paste resized image
+                new_image = Image.new('RGB', (target_width, target_height), (0, 0, 0))
+                # Center the image
+                paste_x = (target_width - new_width) // 2
+                paste_y = (target_height - new_height) // 2
+                new_image.paste(image, (paste_x, paste_y))
+                image = new_image
+                
+                # Scale and offset bounding boxes if provided
+                if boxes is not None and len(boxes) > 0:
+                    boxes = boxes.clone()
+                    boxes[:, [0, 2]] = boxes[:, [0, 2]] * scale + paste_x  # x coordinates
+                    boxes[:, [1, 3]] = boxes[:, [1, 3]] * scale + paste_y  # y coordinates
+            else:
+                # Direct resize without maintaining aspect ratio
+                image = image.resize((target_width, target_height), Image.BILINEAR)
+                
+                # Scale bounding boxes if provided
+                if boxes is not None and len(boxes) > 0:
+                    boxes = boxes.clone()
+                    scale_w = target_width / original_width
+                    scale_h = target_height / original_height
+                    boxes[:, [0, 2]] *= scale_w  # x coordinates
+                    boxes[:, [1, 3]] *= scale_h  # y coordinates
+        
+        # Convert to tensor
+        if normalize:
+            # Standard ImageNet normalization
+            transform_ops = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ])
+        else:
+            transform_ops = transforms.Compose([
+                transforms.ToTensor(),
+            ])
+        
+        image = transform_ops(image)
+        
+        if boxes is not None:
+            return image, boxes
+        return image
+    
+    return transform
+
+
 class CellDetDataset(Dataset):
     """
     Cell Detection Dataset for COCO-style annotations
@@ -47,7 +125,8 @@ class CellDetDataset(Dataset):
     In Structure 2, the JSON file contains image names like "A/image1.jpg"
     """
     
-    def __init__(self, root, preprocess=None, split='train', annotation_file=None, annotations_dir=None):
+    def __init__(self, root, preprocess=None, split='train', annotation_file=None, annotations_dir=None, 
+                 image_size=None, keep_aspect_ratio=True, normalize=True):
         """
         Args:
             root (str): Root directory of the dataset
@@ -57,11 +136,26 @@ class CellDetDataset(Dataset):
                                            overrides the default split-based annotation file
             annotations_dir (str, optional): Directory containing annotation files, relative to root.
                                            If not provided, looks in root directory.
+            image_size (tuple, optional): Target size (height, width) for resizing
+            keep_aspect_ratio (bool): Whether to maintain aspect ratio when resizing
+            normalize (bool): Whether to normalize pixel values
         """
         self.root = root
         self.split = split
-        self.preprocess = preprocess
         self.annotations_dir = annotations_dir
+        self.image_size = image_size
+        self.keep_aspect_ratio = keep_aspect_ratio
+        self.normalize = normalize
+        
+        # Create transform if not provided
+        if preprocess is not None:
+            self.preprocess = preprocess
+        else:
+            self.preprocess = create_detection_transform(
+                image_size=image_size,
+                keep_aspect_ratio=keep_aspect_ratio,
+                normalize=normalize
+            )
         
         # Determine dataset structure and set paths
         self._detect_structure(annotation_file)
@@ -189,11 +283,31 @@ class CellDetDataset(Dataset):
         for ann in anns:
             # Convert COCO bbox format [x, y, width, height] to [x1, y1, x2, y2]
             x, y, w, h = ann['bbox']
-            boxes.append([x, y, x + w, y + h])
+            
+            # Validate bounding box dimensions
+            if w <= 0 or h <= 0:
+                print(f"Warning: Skipping invalid bounding box with w={w}, h={h} for image_id={image_id}")
+                continue
+            
+            # Ensure minimum box size (at least 1 pixel)
+            if w < 1.0:
+                w = 1.0
+            if h < 1.0:
+                h = 1.0
+            
+            x1, y1, x2, y2 = x, y, x + w, y + h
+            
+            # Final validation to ensure box has positive area
+            if x2 <= x1 or y2 <= y1:
+                print(f"Warning: Skipping invalid bounding box coordinates [{x1}, {y1}, {x2}, {y2}] for image_id={image_id}")
+                continue
+                
+            boxes.append([x1, y1, x2, y2])
             
             # Convert COCO category ID to label index
+            # Add 1 to account for background class (label 0 is reserved for background)
             coco_cat_id = ann['category_id']
-            label_idx = self.coco_to_label[coco_cat_id]
+            label_idx = self.coco_to_label[coco_cat_id] + 1
             labels.append(label_idx)
             
             areas.append(ann['area'])
@@ -212,6 +326,21 @@ class CellDetDataset(Dataset):
             areas = torch.zeros((0,), dtype=torch.float32)
             iscrowd = torch.zeros((0,), dtype=torch.int64)
         
+        # Apply preprocessing with bbox handling
+        if hasattr(self.preprocess, '__call__') and len(boxes) > 0:
+            try:
+                # Try to call preprocess with boxes for coordinate scaling
+                image, boxes = self.preprocess(image, boxes)
+            except TypeError:
+                # Fallback for preprocess functions that don't support boxes
+                image = self.preprocess(image)
+        else:
+            image = self.preprocess(image)
+        
+        # Update areas after preprocessing (areas might change due to scaling)
+        if len(boxes) > 0:
+            areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+        
         target = {
             'boxes': boxes,
             'labels': labels,
@@ -220,20 +349,12 @@ class CellDetDataset(Dataset):
             'iscrowd': iscrowd
         }
         
-        # Apply preprocessing
-        if self.preprocess is not None:
-            image = self.preprocess(image)
-        else:
-            # Default preprocessing if none provided
-            transform = transforms.Compose([
-                transforms.ToTensor(),
-            ])
-            image = transform(image)
-        
         return image, target
     
     def get_class_names(self):
         """Get list of class names in order"""
+        # Since we offset labels by +1 for background class, we need to account for this
+        # Labels are now [1, 2, 3, ...] for actual classes
         class_names = []
         for idx in range(self.num_classes):
             coco_cat_id = self.label_to_coco[idx]

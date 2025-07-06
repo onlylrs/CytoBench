@@ -1,9 +1,9 @@
-# Default configuration for cell segmentation
+# Configuration for cell segmentation with frozen backbone (linear probing)
 
 # Common settings
 common:
   seed: 42
-  gpu: 1
+  gpu: 3
   num_workers: 4
   disable_progress_bar: false
 
@@ -22,12 +22,13 @@ data:
 model:
   name: 'maskrcnn_resnet50_fpn'  # Available models: maskrcnn_resnet50_fpn (primary segmentation model)
   pretrained: true
+  freeze_backbone: true  # Linear probing mode - freeze backbone
 
 # Training configuration
 training:
   epochs: 50
   batch_size: 4
-  lr: 0.005
+  lr: 0.01  # Higher learning rate for linear probing
   momentum: 0.9
   weight_decay: 0.0005
   validation_frequency: 5
@@ -40,20 +41,22 @@ training:
 # Evaluation configuration
 evaluation:
   batch_size: 4
-  iou_thresholds: [0.5]
+  # This list is now only for calculating TP/FP/FN for Precision/Recall/F1.
+  # The COCO mAP calculation uses its own standard range of [0.50:0.05:0.95].
+  iou_thresholds: [0.5, 0.75]
   score_threshold: 0.5
   compute_ci: true
-  n_bootstraps: 10
+  n_bootstraps: 1 # Increased for more stable CI, can be lowered for speed
   metrics:
-    - 'precision'
-    - 'recall'
-    - 'f1'
-    - 'map'
-    - 'iou'
-    - 'dice'
+    - 'mAP'
+    - 'mAP_50'
+    - 'mAP_75'
     - 'aji'
+    - 'macro_f1'
+    - 'precision_per_class'
+    - 'recall_per_class'
 
 # Output configuration
 output:
   model_dir: './checkpoints/cell_seg'
-  results_dir: './results/cell_seg' 
+  results_dir: './results/cell_seg'

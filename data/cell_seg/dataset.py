@@ -193,7 +193,26 @@ class CellSegDataset(Dataset):
             # Bounding box
             bbox = ann['bbox']  # [x, y, width, height]
             x, y, w, h = bbox
-            boxes.append([x, y, x + w, y + h])  # Convert to [x1, y1, x2, y2]
+            
+            # Validate bounding box dimensions
+            if w <= 0 or h <= 0:
+                print(f"Warning: Skipping invalid bounding box with w={w}, h={h} for image_id={image_id}")
+                continue
+            
+            # Ensure minimum box size (at least 1 pixel)
+            if w < 1.0:
+                w = 1.0
+            if h < 1.0:
+                h = 1.0
+            
+            x1, y1, x2, y2 = x, y, x + w, y + h
+            
+            # Final validation to ensure box has positive area
+            if x2 <= x1 or y2 <= y1:
+                print(f"Warning: Skipping invalid bounding box coordinates [{x1}, {y1}, {x2}, {y2}] for image_id={image_id}")
+                continue
+                
+            boxes.append([x1, y1, x2, y2])  # Convert to [x1, y1, x2, y2]
             
             # Label (category_id) - apply offset to map dataset classes to model classes
             # Background is class 0, actual objects start from class 1

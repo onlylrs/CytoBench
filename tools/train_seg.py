@@ -208,16 +208,24 @@ def train(config):
     
     # Build model
     num_classes = train_dataset.num_classes
+    freeze_backbone = config['model'].get('freeze_backbone', False)
     model = build_segmentation_model(
         config['model']['name'],
         num_classes,
-        config['model']['pretrained']
+        config['model']['pretrained'],
+        freeze_backbone
     )
     model = model.to(device)
     
     print(f"Built {config['model']['name']} model with {num_classes} classes")
     print(f"Class names: {train_dataset.get_class_names()}")
-    
+
+    # Print training mode information
+    if freeze_backbone:
+        print("🔒 Training mode: Linear probing (backbone frozen)")
+    else:
+        print("🔓 Training mode: Fine-tuning (backbone trainable)")
+
     # Define optimizer
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = optim.SGD(
@@ -226,6 +234,12 @@ def train(config):
         momentum=config['training']['momentum'],
         weight_decay=config['training']['weight_decay']
     )
+
+    # Print optimizer information
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in params)
+    print(f"Optimizer will update {len(params)} parameter groups ({trainable_params:,} parameters)")
+    print(f"Frozen parameters: {total_params - trainable_params:,}")
     
     # Learning rate scheduler
     if 'lr_scheduler' in config['training']:
@@ -282,23 +296,25 @@ def train(config):
                     score_threshold=config['evaluation']['score_threshold']
                 )
                 
-                val_map = val_metrics['mAP_50']
+                val_map_50_95 = val_metrics['mAP']  # mAP@0.5:0.95 (primary metric)
+                val_map_50 = val_metrics['mAP_50']
                 val_macro_f1 = val_metrics['macro_f1']
                 val_mean_dice = val_metrics['mean_dice']
                 val_aji = val_metrics['aji']
                 
                 print(f'Epoch [{epoch}/{config["training"]["epochs"]}], '
                       f'Train Loss: {train_loss:.4f}, '
-                      f'Val mAP@0.5: {val_map:.2f}%, '
+                      f'Val mAP@0.5:0.95: {val_map_50_95:.2f}%, '
+                      f'Val mAP@0.5: {val_map_50:.2f}%, '
                       f'Val Macro F1: {val_macro_f1:.2f}%, '
                       f'Val Dice: {val_mean_dice:.2f}%, '
                       f'Val AJI: {val_aji:.2f}%')
                 
-                # Save best model based on validation mAP
-                if val_map > best_val_map:
-                    best_val_map = val_map
+                # Save best model based on validation mAP@0.5:0.95 (COCO standard)
+                if val_map_50_95 > best_val_map:
+                    best_val_map = val_map_50_95
                     best_model_state = model.state_dict().copy()
-                    print(f"🎯 New best validation mAP: {best_val_map:.2f}%")
+                    print(f"🎯 New best validation mAP@0.5:0.95: {best_val_map:.2f}%")
                     
             except Exception as e:
                 print(f"❌ Validation failed with error: {e}")
@@ -314,7 +330,7 @@ def train(config):
     # Use best model state if available
     if best_model_state is not None:
         model.load_state_dict(best_model_state)
-        print(f"Using best model with validation mAP: {best_val_map:.2f}%")
+        print(f"Using best model with validation mAP@0.5:0.95: {best_val_map:.2f}%")
     
     torch.save(model.state_dict(), save_path)
     print(f"Model saved to {save_path}")
@@ -382,23 +398,25 @@ def format_segmentation_results(metrics, class_names, compute_ci):
     formatted_results += "SEGMENTATION METRICS\n"
     formatted_results += "="*80 + "\n\n"
     
-    # Overall metrics with confidence intervals
-    formatted_results += f"mAP@0.5: {format_metric_with_ci(metrics['mAP_50'], metrics.get('mAP_50_ci') if compute_ci else None)}\n"
-    formatted_results += f"mAP@0.5:0.95: {metrics['mAP']:.2f}%\n"
-    formatted_results += f"mAP@0.75: {metrics['mAP_75']:.2f}%\n\n"
+    # Overall metrics with confidence intervals (primary metric first)
+    formatted_results += f"mAP@0.5:0.95: {format_metric_with_ci(metrics.get('mAP', 0), metrics.get('mAP_ci') if compute_ci else None)}\n"
+    formatted_results += f"mAP@0.5: {format_metric_with_ci(metrics.get('mAP_50', 0), metrics.get('mAP_50_ci') if compute_ci else None)}\n"
+    if 'mAP_75' in metrics:
+        formatted_results += f"mAP@0.75: {format_metric_with_ci(metrics.get('mAP_75', 0), metrics.get('mAP_75_ci') if compute_ci else None)}\n"
+    formatted_results += "\n"
     
-    formatted_results += f"Macro Precision: {format_metric_with_ci(metrics['macro_precision'], metrics.get('macro_precision_ci') if compute_ci else None)}\n"
-    formatted_results += f"Macro Recall: {format_metric_with_ci(metrics['macro_recall'], metrics.get('macro_recall_ci') if compute_ci else None)}\n"
-    formatted_results += f"Macro F1 Score: {format_metric_with_ci(metrics['macro_f1'], metrics.get('macro_f1_ci') if compute_ci else None)}\n\n"
+    formatted_results += f"Macro Precision: {format_metric_with_ci(metrics.get('macro_precision', 0), metrics.get('macro_precision_ci') if compute_ci else None)}\n"
+    formatted_results += f"Macro Recall: {format_metric_with_ci(metrics.get('macro_recall', 0), metrics.get('macro_recall_ci') if compute_ci else None)}\n"
+    formatted_results += f"Macro F1 Score: {format_metric_with_ci(metrics.get('macro_f1', 0), metrics.get('macro_f1_ci') if compute_ci else None)}\n\n"
     
-    formatted_results += f"Weighted Precision: {format_metric_with_ci(metrics['weighted_precision'], metrics.get('weighted_precision_ci') if compute_ci else None)}\n"
-    formatted_results += f"Weighted Recall: {format_metric_with_ci(metrics['weighted_recall'], metrics.get('weighted_recall_ci') if compute_ci else None)}\n"
-    formatted_results += f"Weighted F1 Score: {format_metric_with_ci(metrics['weighted_f1'], metrics.get('weighted_f1_ci') if compute_ci else None)}\n\n"
+    formatted_results += f"Weighted Precision: {format_metric_with_ci(metrics.get('weighted_precision', 0), metrics.get('weighted_precision_ci') if compute_ci else None)}\n"
+    formatted_results += f"Weighted Recall: {format_metric_with_ci(metrics.get('weighted_recall', 0), metrics.get('weighted_recall_ci') if compute_ci else None)}\n"
+    formatted_results += f"Weighted F1 Score: {format_metric_with_ci(metrics.get('weighted_f1', 0), metrics.get('weighted_f1_ci') if compute_ci else None)}\n\n"
     
     # Segmentation-specific metrics
-    formatted_results += f"Mean IoU: {format_metric_with_ci(metrics['mean_iou'], metrics.get('mean_iou_ci') if compute_ci else None)}\n"
-    formatted_results += f"Mean Dice: {format_metric_with_ci(metrics['mean_dice'], metrics.get('mean_dice_ci') if compute_ci else None)}\n"
-    formatted_results += f"AJI Score: {format_metric_with_ci(metrics['aji'], metrics.get('aji_ci') if compute_ci else None)}\n"
+    formatted_results += f"Mean IoU: {format_metric_with_ci(metrics.get('mean_iou', 0), metrics.get('mean_iou_ci') if compute_ci else None)}\n"
+    formatted_results += f"Mean Dice: {format_metric_with_ci(metrics.get('mean_dice', 0), metrics.get('mean_dice_ci') if compute_ci else None)}\n"
+    formatted_results += f"AJI Score: {format_metric_with_ci(metrics.get('aji', 0), metrics.get('aji_ci') if compute_ci else None)}\n"
     
     # Per-class metrics
     formatted_results += "\nPer-class Metrics:\n"
@@ -412,9 +430,9 @@ def format_segmentation_results(metrics, class_names, compute_ci):
         rec_ci = metrics.get('recall_ci')[i] if compute_ci and 'recall_ci' in metrics else None
         f1_ci = metrics.get('f1_ci')[i] if compute_ci and 'f1_ci' in metrics else None
         
-        prec_str = format_metric_with_ci(metrics['precision'][i], prec_ci)
-        rec_str = format_metric_with_ci(metrics['recall'][i], rec_ci)
-        f1_str = format_metric_with_ci(metrics['f1'][i], f1_ci)
+        prec_str = format_metric_with_ci(metrics['precision_per_class'][i], prec_ci)
+        rec_str = format_metric_with_ci(metrics['recall_per_class'][i], rec_ci)
+        f1_str = format_metric_with_ci(metrics['f1_per_class'][i], f1_ci)
         iou_str = f"{metrics['iou_per_class'][i]:.2f}%"
         dice_str = f"{metrics['dice_per_class'][i]:.2f}%"
         support = metrics['total_gt'][i]

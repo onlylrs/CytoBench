@@ -190,14 +190,16 @@ def compute_detection_metrics_per_class(predictions, ground_truths, class_names,
                 fn_per_class[gt_label] += 1
         
         # Compute metrics per class
+        # Note: Labels are offset by +1 (actual labels are [1, 2, 3, ...] for classes [0, 1, 2, ...])
         precision_per_class = []
         recall_per_class = []
         f1_per_class = []
         
         for class_idx in range(num_classes):
-            tp = tp_per_class[class_idx]
-            fp = fp_per_class[class_idx]
-            fn = fn_per_class[class_idx]
+            label_val = class_idx + 1  # Actual label value (offset by +1 due to background class)
+            tp = tp_per_class[label_val]
+            fp = fp_per_class[label_val]
+            fn = fn_per_class[label_val]
             
             precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
             recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
@@ -211,11 +213,11 @@ def compute_detection_metrics_per_class(predictions, ground_truths, class_names,
             'precision': precision_per_class,
             'recall': recall_per_class,
             'f1': f1_per_class,
-            'tp': [tp_per_class[i] for i in range(num_classes)],
-            'fp': [fp_per_class[i] for i in range(num_classes)],
-            'fn': [fn_per_class[i] for i in range(num_classes)],
-            'total_gt': [total_gt_per_class[i] for i in range(num_classes)],
-            'total_pred': [total_pred_per_class[i] for i in range(num_classes)]
+            'tp': [tp_per_class[i + 1] for i in range(num_classes)],  # offset by +1
+            'fp': [fp_per_class[i + 1] for i in range(num_classes)],  # offset by +1
+            'fn': [fn_per_class[i + 1] for i in range(num_classes)],  # offset by +1
+            'total_gt': [total_gt_per_class[i + 1] for i in range(num_classes)],  # offset by +1
+            'total_pred': [total_pred_per_class[i + 1] for i in range(num_classes)]  # offset by +1
         }
     
     return metrics
@@ -265,7 +267,7 @@ def compute_map_coco(predictions, ground_truths, class_names):
                 coco_gt["annotations"].append({
                     "id": ann_id,
                     "image_id": img_id,
-                    "category_id": label_val + 1,  # COCO categories start from 1
+                    "category_id": label_val,  # Labels are already offset (+1) to account for background
                     "bbox": [x1, y1, x2 - x1, y2 - y1],  # COCO format: [x, y, width, height]
                     "area": (x2 - x1) * (y2 - y1),
                     "iscrowd": 0
@@ -282,7 +284,7 @@ def compute_map_coco(predictions, ground_truths, class_names):
                 score_val = score.item() if hasattr(score, 'item') else float(score)
                 coco_preds.append({
                     "image_id": img_id,
-                    "category_id": label_val + 1,  # COCO categories start from 1
+                    "category_id": label_val,  # Labels are already offset (+1) to account for background
                     "bbox": [x1, y1, x2 - x1, y2 - y1],  # COCO format
                     "score": score_val
                 })

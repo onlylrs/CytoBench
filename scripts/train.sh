@@ -43,22 +43,35 @@ generate_experiment_name() {
     if [ -n "$EXPERIMENT_NAME" ]; then
         echo "📝 Using experiment name from Python script: ${EXPERIMENT_NAME}"
     else
-        # Extract backbone and dataset from config file for consistent naming
+        # Extract model/backbone and dataset from config file for consistent naming
         if [ -f "$CONFIG_FILE" ]; then
-            # Extract backbone name from backbone section
-            BACKBONE=$(extract_config_value "$CONFIG_FILE" "name" "backbone")
+            # Extract model name based on task type
+            if [[ "$TASK" == "cell_det" || "$TASK" == "cell_seg" ]]; then
+                # Detection and segmentation use model.name
+                MODEL_NAME=$(extract_config_value "$CONFIG_FILE" "name" "model")
+            else
+                # Classification uses backbone.name
+                MODEL_NAME=$(extract_config_value "$CONFIG_FILE" "name" "backbone")
+            fi
+            
             # Extract dataset name from data section
             DATASET=$(extract_config_value "$CONFIG_FILE" "dataset" "data")
 
-            if [ -n "$BACKBONE" ] && [ -n "$DATASET" ]; then
-                EXPERIMENT_NAME="${BACKBONE}_${DATASET}_${TIMESTAMP}"
+            if [ -n "$MODEL_NAME" ] && [ -n "$DATASET" ]; then
+                EXPERIMENT_NAME="${MODEL_NAME}_${DATASET}_${TIMESTAMP}"
                 echo "📝 Using experiment name from config: ${EXPERIMENT_NAME}"
-                echo "   Backbone: ${BACKBONE}"
+                echo "   Model: ${MODEL_NAME}"
                 echo "   Dataset: ${DATASET}"
                 echo "   Timestamp: ${TIMESTAMP}"
             else
                 EXPERIMENT_NAME="${TASK}_${TIMESTAMP}"
-                echo "⚠️  Could not extract backbone/dataset from config, using: ${EXPERIMENT_NAME}"
+                echo "⚠️  Could not extract model/dataset from config, using: ${EXPERIMENT_NAME}"
+                if [ -z "$MODEL_NAME" ]; then
+                    echo "   - Model name not found"
+                fi
+                if [ -z "$DATASET" ]; then
+                    echo "   - Dataset name not found"
+                fi
             fi
         else
             EXPERIMENT_NAME="${TASK}_${TIMESTAMP}"
@@ -102,6 +115,7 @@ while [[ $# -gt 0 ]]; do
                 TASK_ARG="$1"
                 TASK="$TASK_ARG"
                 CONFIG_FILE="./configs/${TASK}/base_config.yaml"
+                OUTPUT_DIR="./results/${TASK}"
                 shift
             # Second non-option argument is the config file
             elif [[ -z "$CONFIG_ARG" ]]; then

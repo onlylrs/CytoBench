@@ -5,6 +5,19 @@ from scipy.optimize import linear_sum_assignment
 import warnings
 from collections import defaultdict
 from tqdm import tqdm
+import json
+import tempfile
+import os
+from pycocotools.coco import COCO
+from pycocotools.cocoeval import COCOeval
+import pycocotools.mask as mask_util
+
+
+def _squeeze_mask(mask):
+    """Ensure (H,W) bool array from mask that might be (1,H,W) or (H,W)"""
+    if mask.ndim == 3:
+        mask = mask[0]  # Remove channel dimension
+    return mask > 0.5  # Threshold and convert to bool
 
 
 def compute_iou(mask1, mask2):
@@ -109,6 +122,107 @@ def masks_to_boxes(masks):
     return np.array(boxes)
 
 
+def compute_map_coco_seg(predictions, ground_truths, class_names):
+    """
+    Compute COCO-style mAP for segmentation masks using pycocotools.
+
+    Args:
+        predictions (list): List of prediction dictionaries for each image.
+        ground_truths (list): List of ground truth dictionaries for each image.
+        class_names (list): List of class names (background is ignored).
+
+    Returns:
+        dict: A dictionary containing mAP results.
+    """
+    coco_gt = {"images": [], "annotations": [], "categories": []}
+    coco_preds = []
+
+    # COCO category IDs start from 1. We assume class_names[0] is background.
+    for i, name in enumerate(class_names[1:], 1):
+        coco_gt["categories"].append({"id": i, "name": name, "supercategory": "cell"})
+
+    ann_id = 1
+    for img_id, (pred, gt) in enumerate(zip(predictions, ground_truths)):
+        # Use a placeholder image size; COCOeval doesn't use it for area calculation with RLE.
+        height, width = (1024, 1024) if gt['masks'].numel() == 0 else gt['masks'].shape[-2:]
+        coco_gt["images"].append({"id": img_id, "width": width, "height": height})
+
+        # Ground Truth Annotations
+        gt_masks = gt['masks'].cpu().numpy()
+        gt_labels = gt['labels'].cpu().numpy()
+        for i in range(len(gt_masks)):
+            mask = gt_masks[i]
+            rle = mask_util.encode(np.asfortranarray(mask.astype(np.uint8)))
+            area = mask_util.area(rle)
+            bbox = mask_util.toBbox(rle)
+            rle['counts'] = rle['counts'].decode('utf-8')  # for json serialization
+
+            coco_gt["annotations"].append({
+                "id": ann_id,
+                "image_id": img_id,
+                "category_id": int(gt_labels[i]),
+                "segmentation": rle,
+                "bbox": bbox.tolist(),
+                "area": float(area),
+                "iscrowd": 0,
+            })
+            ann_id += 1
+
+        # Prediction Annotations
+        pred_masks = pred['masks'].cpu().numpy()
+        pred_labels = pred['labels'].cpu().numpy()
+        pred_scores = pred['scores'].cpu().numpy()
+        for i in range(len(pred_masks)):
+            mask = _squeeze_mask(pred_masks[i]) # Squeeze and threshold
+            rle = mask_util.encode(np.asfortranarray(mask.astype(np.uint8)))
+            rle['counts'] = rle['counts'].decode('utf-8')
+
+            coco_preds.append({
+                "image_id": img_id,
+                "category_id": int(pred_labels[i]),
+                "segmentation": rle,
+                "score": float(pred_scores[i]),
+            })
+
+    if not coco_preds:
+        return {'mAP': 0.0, 'mAP_50': 0.0, 'mAP_75': 0.0}
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f_gt:
+        json.dump(coco_gt, f_gt)
+        gt_path = f_gt.name
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f_pred:
+        json.dump(coco_preds, f_pred)
+        pred_path = f_pred.name
+
+    map_results = {}
+    try:
+        coco_gt_api = COCO(gt_path)
+        coco_pred_api = coco_gt_api.loadRes(pred_path)
+
+        coco_eval = COCOeval(coco_gt_api, coco_pred_api, iouType='segm')
+        coco_eval.evaluate()
+        coco_eval.accumulate()
+        coco_eval.summarize()
+
+        stats = coco_eval.stats
+        map_results = {
+            'mAP': stats[0] * 100,       # mAP @ IoU=0.50:0.95
+            'mAP_50': stats[1] * 100,    # mAP @ IoU=0.50
+            'mAP_75': stats[2] * 100,    # mAP @ IoU=0.75
+            'mAP_small': stats[3] * 100,
+            'mAP_medium': stats[4] * 100,
+            'mAP_large': stats[5] * 100,
+        }
+    except Exception as e:
+        print(f"Error during COCO evaluation: {e}")
+        map_results = {'mAP': 0.0, 'mAP_50': 0.0, 'mAP_75': 0.0}
+    finally:
+        os.remove(gt_path)
+        os.remove(pred_path)
+
+    return map_results
+
+
 def compute_segmentation_metrics_per_class(predictions, ground_truths, class_names, 
                                          iou_thresholds=[0.5, 0.75], score_threshold=0.5):
     """
@@ -126,127 +240,81 @@ def compute_segmentation_metrics_per_class(predictions, ground_truths, class_nam
     """
     num_classes = len(class_names)
     
-    # Initialize counters for primary IoU threshold
+    # Use the first IoU threshold for TP/FP/FN, precision, recall, F1
     primary_iou = iou_thresholds[0]
+    
     tp = np.zeros(num_classes)
     fp = np.zeros(num_classes)
     fn = np.zeros(num_classes)
     total_gt = np.zeros(num_classes)
     total_pred = np.zeros(num_classes)
     
-    # For mAP computation at different IoU thresholds
-    all_scores = [[] for _ in range(num_classes)]
-    all_matches = {iou_thresh: [[] for _ in range(num_classes)] for iou_thresh in iou_thresholds}
-    
-    # For mask-based metrics
     class_ious = [[] for _ in range(num_classes)]
     class_dices = [[] for _ in range(num_classes)]
-    
-    # For AJI computation (per image)
     aji_scores = []
     
     for pred, gt in zip(predictions, ground_truths):
         # Convert tensors to numpy
-        pred_boxes = pred['boxes'].cpu().numpy() if len(pred['boxes']) > 0 else np.array([]).reshape(0, 4)
-        pred_labels = pred['labels'].cpu().numpy() if len(pred['labels']) > 0 else np.array([])
-        pred_scores = pred['scores'].cpu().numpy() if len(pred['scores']) > 0 else np.array([])
-        pred_masks = pred['masks'].cpu().numpy() if len(pred['masks']) > 0 else np.array([]).reshape(0, 0, 0)
+        pred_labels = pred['labels'].cpu().numpy()
+        pred_scores = pred['scores'].cpu().numpy()
+        pred_masks = pred['masks'].cpu().numpy()
         
-        gt_boxes = gt['boxes'].cpu().numpy() if len(gt['boxes']) > 0 else np.array([]).reshape(0, 4)
-        gt_labels = gt['labels'].cpu().numpy() if len(gt['labels']) > 0 else np.array([])
-        gt_masks = gt['masks'].cpu().numpy() if len(gt['masks']) > 0 else np.array([]).reshape(0, 0, 0)
+        gt_labels = gt['labels'].cpu().numpy()
+        gt_masks = gt['masks'].cpu().numpy()
         
         # Filter predictions by score threshold
-        if len(pred_scores) > 0:
-            valid_preds = pred_scores >= score_threshold
-            pred_boxes = pred_boxes[valid_preds]
-            pred_labels = pred_labels[valid_preds]
-            pred_scores = pred_scores[valid_preds]
-            pred_masks = pred_masks[valid_preds]
+        valid_preds = pred_scores >= score_threshold
+        pred_labels = pred_labels[valid_preds]
+        pred_masks = pred_masks[valid_preds]
         
-        # Count ground truth instances per class
-        for class_idx in range(1, num_classes + 1):  # Skip background (class 0)
-            gt_class_mask = gt_labels == class_idx
-            total_gt[class_idx - 1] += gt_class_mask.sum()
+        # Count instances per class
+        for class_idx in range(1, num_classes + 1):
+            total_gt[class_idx - 1] += (gt_labels == class_idx).sum()
+            total_pred[class_idx - 1] += (pred_labels == class_idx).sum()
+
+        matches = np.zeros(len(pred_labels), dtype=bool)
+        gt_matched = np.zeros(len(gt_labels), dtype=bool)
+        
+        if len(pred_labels) > 0 and len(gt_labels) > 0:
+            iou_matrix = np.zeros((len(pred_labels), len(gt_labels)))
+            for i in range(len(pred_labels)):
+                for j in range(len(gt_labels)):
+                    if pred_labels[i] == gt_labels[j]:
+                        pred_mask = _squeeze_mask(pred_masks[i])
+                        gt_mask = _squeeze_mask(gt_masks[j])
+                        iou_matrix[i, j] = compute_iou(pred_mask, gt_mask)
             
-            pred_class_mask = pred_labels == class_idx
-            total_pred[class_idx - 1] += pred_class_mask.sum()
-        
-        # Store scores for all predictions (only once)
+            if iou_matrix.max() > 0:
+                pred_indices, gt_indices = linear_sum_assignment(-iou_matrix)
+                for p_idx, g_idx in zip(pred_indices, gt_indices):
+                    if iou_matrix[p_idx, g_idx] >= primary_iou:
+                        matches[p_idx] = True
+                        gt_matched[g_idx] = True
+                        
+                        class_idx = pred_labels[p_idx] - 1
+                        pred_mask = _squeeze_mask(pred_masks[p_idx])
+                        gt_mask = _squeeze_mask(gt_masks[g_idx])
+                        class_ious[class_idx].append(compute_iou(pred_mask, gt_mask))
+                        class_dices[class_idx].append(compute_dice(pred_mask, gt_mask))
+
         for class_idx in range(1, num_classes + 1):
             pred_class_mask = pred_labels == class_idx
-            class_pred_indices = np.where(pred_class_mask)[0]
-            for idx in class_pred_indices:
-                all_scores[class_idx - 1].append(pred_scores[idx])
-        
-        # Compute matches for each IoU threshold
-        for iou_thresh in iou_thresholds:
-            matches = np.zeros(len(pred_labels), dtype=bool)
-            gt_matched = np.zeros(len(gt_labels), dtype=bool)
+            gt_class_mask = gt_labels == class_idx
             
-            if len(pred_labels) > 0 and len(gt_labels) > 0:
-                # Compute IoU matrix for masks
-                iou_matrix = np.zeros((len(pred_labels), len(gt_labels)))
-                for i in range(len(pred_labels)):
-                    for j in range(len(gt_labels)):
-                        if pred_labels[i] == gt_labels[j]:
-                            pred_mask = pred_masks[i] > 0.5
-                            gt_mask = gt_masks[j] > 0.5
-                            iou_matrix[i, j] = compute_iou(pred_mask, gt_mask)
-                
-                # Find matches using Hungarian algorithm
-                if iou_matrix.max() > 0:
-                    pred_indices, gt_indices = linear_sum_assignment(-iou_matrix)
-                    for p_idx, g_idx in zip(pred_indices, gt_indices):
-                        if iou_matrix[p_idx, g_idx] >= iou_thresh:
-                            matches[p_idx] = True
-                            gt_matched[g_idx] = True
-                            
-                            # Store IoU and Dice for matched pairs (only for primary threshold)
-                            if iou_thresh == primary_iou:
-                                class_idx = pred_labels[p_idx] - 1
-                                pred_mask = pred_masks[p_idx] > 0.5
-                                gt_mask = gt_masks[g_idx] > 0.5
-                                class_ious[class_idx].append(compute_iou(pred_mask, gt_mask))
-                                class_dices[class_idx].append(compute_dice(pred_mask, gt_mask))
-            
-            # Store matches for mAP computation
-            for class_idx in range(1, num_classes + 1):
-                pred_class_mask = pred_labels == class_idx
-                class_pred_indices = np.where(pred_class_mask)[0]
-                for idx in class_pred_indices:
-                    all_matches[iou_thresh][class_idx - 1].append(matches[idx])
-            
-            # Update TP, FP, FN for primary IoU threshold only
-            if iou_thresh == primary_iou:
-                for class_idx in range(1, num_classes + 1):
-                    pred_class_mask = pred_labels == class_idx
-                    gt_class_mask = gt_labels == class_idx
-                    
-                    # True positives: matched predictions of this class
-                    tp[class_idx - 1] += (matches & pred_class_mask).sum()
-                    
-                    # False positives: unmatched predictions of this class
-                    fp[class_idx - 1] += ((~matches) & pred_class_mask).sum()
-                    
-                    # False negatives: unmatched ground truths of this class
-                    fn[class_idx - 1] += ((~gt_matched) & gt_class_mask).sum()
-        
-        # Compute AJI for this image
-        if len(pred_masks) > 0 and len(gt_masks) > 0:
-            pred_mask_list = [pred_masks[i] > 0.5 for i in range(len(pred_masks))]
-            gt_mask_list = [gt_masks[i] > 0.5 for i in range(len(gt_masks))]
-            aji_score = compute_aji(pred_mask_list, gt_mask_list)
-            aji_scores.append(aji_score)
-        elif len(gt_masks) == 0 and len(pred_masks) == 0:
-            aji_scores.append(1.0)
-        else:
-            aji_scores.append(0.0)
-    
-    # Compute precision, recall, F1 for each class
+            tp[class_idx - 1] += (matches & pred_class_mask).sum()
+            fp[class_idx - 1] += ((~matches) & pred_class_mask).sum()
+            fn[class_idx - 1] += ((~gt_matched) & gt_class_mask).sum()
+
+        pred_mask_list = [_squeeze_mask(m) for m in pred_masks]
+        gt_mask_list = [_squeeze_mask(m) for m in gt_masks]
+        aji_scores.append(compute_aji(pred_mask_list, gt_mask_list))
+
+    # Compute precision, recall, F1, and mean IoU/Dice per class
     precision = np.zeros(num_classes)
     recall = np.zeros(num_classes)
     f1 = np.zeros(num_classes)
+    mean_ious = np.zeros(num_classes)
+    mean_dices = np.zeros(num_classes)
     
     for i in range(num_classes):
         if tp[i] + fp[i] > 0:
@@ -255,51 +323,12 @@ def compute_segmentation_metrics_per_class(predictions, ground_truths, class_nam
             recall[i] = tp[i] / (tp[i] + fn[i]) * 100
         if precision[i] + recall[i] > 0:
             f1[i] = 2 * precision[i] * recall[i] / (precision[i] + recall[i])
-    
-    # Compute mAP for each IoU threshold
-    map_results = {}
-    for iou_thresh in iou_thresholds:
-        map_scores = []
-        for i in range(num_classes):
-            if len(all_scores[i]) > 0 and len(all_matches[iou_thresh][i]) > 0:
-                # Sort by score (descending)
-                sorted_indices = np.argsort(all_scores[i])[::-1]
-                sorted_matches = np.array(all_matches[iou_thresh][i])[sorted_indices]
-                
-                # Compute precision-recall curve
-                tp_cumsum = np.cumsum(sorted_matches)
-                fp_cumsum = np.cumsum(~sorted_matches)
-                
-                precisions = tp_cumsum / (tp_cumsum + fp_cumsum)
-                recalls = tp_cumsum / max(total_gt[i], 1)
-                
-                # Compute AP using 11-point interpolation
-                ap = 0
-                for t in np.arange(0, 1.1, 0.1):
-                    if np.sum(recalls >= t) == 0:
-                        p = 0
-                    else:
-                        p = np.max(precisions[recalls >= t])
-                    ap += p / 11
-                
-                map_scores.append(ap * 100)
-            else:
-                map_scores.append(0.0)
-        
-        map_results[f'map_{int(iou_thresh * 100)}'] = map_scores
-    
-    # Compute mean IoU and Dice per class
-    mean_ious = []
-    mean_dices = []
-    for i in range(num_classes):
         if len(class_ious[i]) > 0:
-            mean_ious.append(np.mean(class_ious[i]) * 100)
-            mean_dices.append(np.mean(class_dices[i]) * 100)
-        else:
-            mean_ious.append(0.0)
-            mean_dices.append(0.0)
-    
-    result = {
+            mean_ious[i] = np.mean(class_ious[i]) * 100
+        if len(class_dices[i]) > 0:
+            mean_dices[i] = np.mean(class_dices[i]) * 100
+            
+    return {
         'precision': precision,
         'recall': recall,
         'f1': f1,
@@ -312,11 +341,6 @@ def compute_segmentation_metrics_per_class(predictions, ground_truths, class_nam
         'dice_per_class': mean_dices,
         'aji_scores': aji_scores
     }
-    
-    # Add mAP results
-    result.update(map_results)
-    
-    return result
 
 
 def bootstrap_sample(predictions, ground_truths, n_samples):
@@ -343,7 +367,7 @@ def compute_ci(values, confidence=0.95):
 
 
 def compute_segmentation_metrics(predictions, ground_truths, class_names, 
-                               compute_ci=True, n_bootstraps=1000, 
+                               compute_confidence_intervals=True, n_bootstraps=1000, 
                                iou_thresholds=[0.5, 0.75], score_threshold=0.5):
     """
     Compute comprehensive segmentation metrics with confidence intervals
@@ -365,90 +389,48 @@ def compute_segmentation_metrics(predictions, ground_truths, class_names,
         return {}
     
     try:
-        # Compute base metrics
+        # Compute COCO-style mAP first
+        map_results = compute_map_coco_seg(predictions, ground_truths, class_names)
+
+        # Compute other metrics like precision, recall, F1, AJI
         base_metrics = compute_segmentation_metrics_per_class(
             predictions, ground_truths, class_names, 
             iou_thresholds, score_threshold
         )
         
         # Aggregate metrics
-        results = {
-            'precision': base_metrics['precision'],
-            'recall': base_metrics['recall'],
-            'f1': base_metrics['f1'],
-            'tp': base_metrics['tp'],
-            'fp': base_metrics['fp'],
-            'fn': base_metrics['fn'],
-            'total_gt': base_metrics['total_gt'],
-            'total_pred': base_metrics['total_pred'],
-            'iou_per_class': base_metrics['iou_per_class'],
-            'dice_per_class': base_metrics['dice_per_class']
-        }
+        results = {**map_results} # Start with mAP results
         
-        # Add per-class mAP results for all thresholds
-        for key, value in base_metrics.items():
-            if key.startswith('map_'):
-                results[f'{key}_per_class'] = value
+        # Add per-class precision, recall, etc.
+        results['precision_per_class'] = base_metrics['precision']
+        results['recall_per_class'] = base_metrics['recall']
+        results['f1_per_class'] = base_metrics['f1']
+        results['iou_per_class'] = base_metrics['iou_per_class']
+        results['dice_per_class'] = base_metrics['dice_per_class']
         
-        # Compute overall metrics
+        # Add TP/FP/FN statistics
+        results['tp'] = base_metrics['tp']
+        results['fp'] = base_metrics['fp']
+        results['fn'] = base_metrics['fn']
+        results['total_gt'] = base_metrics['total_gt']
+        results['total_pred'] = base_metrics['total_pred']
+        
+        # Add overall metrics, ignoring classes with no ground truth instances
         valid_classes = base_metrics['total_gt'] > 0
-        
         if valid_classes.any():
             results['macro_precision'] = np.mean(base_metrics['precision'][valid_classes])
             results['macro_recall'] = np.mean(base_metrics['recall'][valid_classes])
             results['macro_f1'] = np.mean(base_metrics['f1'][valid_classes])
-            results['mean_iou'] = np.mean(base_metrics['iou_per_class'])
-            results['mean_dice'] = np.mean(base_metrics['dice_per_class'])
-            
-            # Compute mAP for different IoU thresholds
-            for iou_thresh in iou_thresholds:
-                thresh_key = f'map_{int(iou_thresh * 100)}'
-                if thresh_key in base_metrics:
-                    results[f'mAP_{int(iou_thresh * 100)}'] = np.mean(base_metrics[thresh_key])
-            
-            # Set standard mAP values
-            if 'map_50' in base_metrics:
-                results['mAP_50'] = results['mAP_50'] if 'mAP_50' in results else np.mean(base_metrics['map_50'])
-            if 'map_75' in base_metrics:
-                results['mAP_75'] = results['mAP_75'] if 'mAP_75' in results else np.mean(base_metrics['map_75'])
-            
-            # Compute overall mAP (average across IoU thresholds)
-            available_maps = [results[key] for key in results.keys() if key.startswith('mAP_') and key != 'mAP_50_ci']
-            if available_maps:
-                results['mAP'] = np.mean(available_maps)
+            results['mean_iou'] = np.mean(base_metrics['iou_per_class'][valid_classes])
+            results['mean_dice'] = np.mean(base_metrics['dice_per_class'][valid_classes])
             
             # Weighted metrics
             weights = base_metrics['total_gt'][valid_classes]
             if weights.sum() > 0:
-                results['weighted_precision'] = np.average(
-                    base_metrics['precision'][valid_classes], weights=weights
-                )
-                results['weighted_recall'] = np.average(
-                    base_metrics['recall'][valid_classes], weights=weights
-                )
-                results['weighted_f1'] = np.average(
-                    base_metrics['f1'][valid_classes], weights=weights
-                )
-            else:
-                results['weighted_precision'] = 0
-                results['weighted_recall'] = 0
-                results['weighted_f1'] = 0
-        else:
-            # No valid classes
-            default_metrics = {
-                'macro_precision': 0, 'macro_recall': 0, 'macro_f1': 0,
-                'mean_iou': 0, 'mean_dice': 0,
-                'weighted_precision': 0, 'weighted_recall': 0, 'weighted_f1': 0,
-                'mAP': 0
-            }
-            
-            # Add mAP for all thresholds
-            for iou_thresh in iou_thresholds:
-                default_metrics[f'mAP_{int(iou_thresh * 100)}'] = 0
-            
-            results.update(default_metrics)
+                results['weighted_precision'] = np.average(base_metrics['precision'][valid_classes], weights=weights)
+                results['weighted_recall'] = np.average(base_metrics['recall'][valid_classes], weights=weights)
+                results['weighted_f1'] = np.average(base_metrics['f1'][valid_classes], weights=weights)
         
-        # AJI score (already a 0-1 ratio, convert to percentage for display)
         if base_metrics['aji_scores']:
             results['aji'] = np.mean(base_metrics['aji_scores']) * 100
         else:
@@ -458,119 +440,45 @@ def compute_segmentation_metrics(predictions, ground_truths, class_names,
         if compute_confidence_intervals and len(predictions) > 1:
             print(f"Computing bootstrap confidence intervals with {n_bootstraps} samples...")
             
-            bootstrap_precision = [[] for _ in range(len(class_names))]
-            bootstrap_recall = [[] for _ in range(len(class_names))]
-            bootstrap_f1 = [[] for _ in range(len(class_names))]
-            bootstrap_macro_precision = []
-            bootstrap_macro_recall = []
-            bootstrap_macro_f1 = []
-            bootstrap_weighted_precision = []
-            bootstrap_weighted_recall = []
-            bootstrap_weighted_f1 = []
-            bootstrap_maps = {f'mAP_{int(iou_thresh * 100)}': [] for iou_thresh in iou_thresholds}
-            bootstrap_maps['mAP'] = []
-            bootstrap_ious = []
-            bootstrap_dices = []
+            bootstrap_maps = defaultdict(list)
             bootstrap_ajis = []
-            
-            # Add progress bar to bootstrap computation
+            bootstrap_f1s = []
+
             bootstrap_samples = bootstrap_sample(predictions, ground_truths, n_bootstraps)
             
-            for i, (sample_preds, sample_gts) in enumerate(tqdm(bootstrap_samples, 
-                                                               total=n_bootstraps, 
-                                                               desc="Bootstrap CI")):
+            for sample_preds, sample_gts in tqdm(bootstrap_samples, total=n_bootstraps, desc="Bootstrap CI"):
                 try:
+                    # mAP CI
+                    sample_map_results = compute_map_coco_seg(sample_preds, sample_gts, class_names)
+                    for key, value in sample_map_results.items():
+                        bootstrap_maps[key].append(value)
+                    
+                    # Other metrics CI
                     sample_metrics = compute_segmentation_metrics_per_class(
-                        sample_preds, sample_gts, class_names, 
-                        iou_thresholds, score_threshold
+                        sample_preds, sample_gts, class_names, iou_thresholds, score_threshold
                     )
                     
-                    # Per-class metrics
-                    for j in range(len(class_names)):
-                        bootstrap_precision[j].append(sample_metrics['precision'][j])
-                        bootstrap_recall[j].append(sample_metrics['recall'][j])
-                        bootstrap_f1[j].append(sample_metrics['f1'][j])
-                    
-                    # Aggregate metrics
-                    valid_classes = sample_metrics['total_gt'] > 0
-                    if valid_classes.any():
-                        bootstrap_macro_precision.append(
-                            np.mean(sample_metrics['precision'][valid_classes])
-                        )
-                        bootstrap_macro_recall.append(
-                            np.mean(sample_metrics['recall'][valid_classes])
-                        )
-                        bootstrap_macro_f1.append(
-                            np.mean(sample_metrics['f1'][valid_classes])
-                        )
-                        
-                        weights = sample_metrics['total_gt'][valid_classes]
-                        if weights.sum() > 0:
-                            bootstrap_weighted_precision.append(
-                                np.average(sample_metrics['precision'][valid_classes], weights=weights)
-                            )
-                            bootstrap_weighted_recall.append(
-                                np.average(sample_metrics['recall'][valid_classes], weights=weights)
-                            )
-                            bootstrap_weighted_f1.append(
-                                np.average(sample_metrics['f1'][valid_classes], weights=weights)
-                            )
-                        
-                        # Compute mAP for different thresholds
-                        for iou_thresh in iou_thresholds:
-                            thresh_key = f'map_{int(iou_thresh * 100)}'
-                            map_key = f'mAP_{int(iou_thresh * 100)}'
-                            if thresh_key in sample_metrics:
-                                bootstrap_maps[map_key].append(np.mean(sample_metrics[thresh_key]))
-                        
-                        # Compute overall mAP
-                        available_maps = []
-                        for iou_thresh in iou_thresholds:
-                            thresh_key = f'map_{int(iou_thresh * 100)}'
-                            if thresh_key in sample_metrics:
-                                available_maps.append(np.mean(sample_metrics[thresh_key]))
-                        if available_maps:
-                            bootstrap_maps['mAP'].append(np.mean(available_maps))
-                        
-                        bootstrap_ious.append(np.mean(sample_metrics['iou_per_class']))
-                        bootstrap_dices.append(np.mean(sample_metrics['dice_per_class']))
-                    
+                    # AJI CI
                     if sample_metrics['aji_scores']:
                         bootstrap_ajis.append(np.mean(sample_metrics['aji_scores']) * 100)
-                    
+
+                    # Macro F1 CI
+                    valid_classes = sample_metrics['total_gt'] > 0
+                    if valid_classes.any():
+                        bootstrap_f1s.append(np.mean(sample_metrics['f1'][valid_classes]))
+
                 except Exception as e:
-                    print(f"Warning: Bootstrap sample {i+1} failed: {e}")
+                    print(f"\nWarning: Bootstrap sample failed: {e}")
                     continue
             
-            # Compute confidence intervals
-            results['precision_ci'] = [compute_ci(bootstrap_precision[i]) for i in range(len(class_names))]
-            results['recall_ci'] = [compute_ci(bootstrap_recall[i]) for i in range(len(class_names))]
-            results['f1_ci'] = [compute_ci(bootstrap_f1[i]) for i in range(len(class_names))]
-            
-            # Aggregate CIs
-            if bootstrap_macro_precision:
-                results['macro_precision_ci'] = compute_ci(bootstrap_macro_precision)
-                results['macro_recall_ci'] = compute_ci(bootstrap_macro_recall)
-                results['macro_f1_ci'] = compute_ci(bootstrap_macro_f1)
-            
-            if bootstrap_weighted_precision:
-                results['weighted_precision_ci'] = compute_ci(bootstrap_weighted_precision)
-                results['weighted_recall_ci'] = compute_ci(bootstrap_weighted_recall)
-                results['weighted_f1_ci'] = compute_ci(bootstrap_weighted_f1)
-            
-            # mAP CIs
+            # Compute and store confidence intervals
             for key, values in bootstrap_maps.items():
                 if values:
                     results[f'{key}_ci'] = compute_ci(values)
-            
-            if bootstrap_ious:
-                results['mean_iou_ci'] = compute_ci(bootstrap_ious)
-            
-            if bootstrap_dices:
-                results['mean_dice_ci'] = compute_ci(bootstrap_dices)
-            
             if bootstrap_ajis:
                 results['aji_ci'] = compute_ci(bootstrap_ajis)
+            if bootstrap_f1s:
+                results['macro_f1_ci'] = compute_ci(bootstrap_f1s)
         
         return results
         

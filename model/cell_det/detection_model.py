@@ -5,7 +5,11 @@ from torchvision.models.detection import (
     fasterrcnn_resnet50_fpn,
     fasterrcnn_mobilenet_v3_large_fpn,
     fasterrcnn_mobilenet_v3_large_320_fpn,
-    retinanet_resnet50_fpn
+    retinanet_resnet50_fpn,
+    FasterRCNN_ResNet50_FPN_Weights,
+    FasterRCNN_MobileNet_V3_Large_FPN_Weights,
+    FasterRCNN_MobileNet_V3_Large_320_FPN_Weights,
+    RetinaNet_ResNet50_FPN_Weights
 )
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.retinanet import RetinaNetClassificationHead
@@ -42,7 +46,10 @@ class DetectionModel(nn.Module):
     
     def _build_fasterrcnn_resnet50_fpn(self, pretrained):
         """Build Faster R-CNN with ResNet-50 FPN backbone"""
-        model = fasterrcnn_resnet50_fpn(pretrained=pretrained)
+        if pretrained:
+            model = fasterrcnn_resnet50_fpn(weights=FasterRCNN_ResNet50_FPN_Weights.DEFAULT)
+        else:
+            model = fasterrcnn_resnet50_fpn(weights=None)
         
         # Replace the classifier head
         in_features = model.roi_heads.box_predictor.cls_score.in_features
@@ -52,7 +59,10 @@ class DetectionModel(nn.Module):
     
     def _build_fasterrcnn_mobilenet_v3_large_fpn(self, pretrained):
         """Build Faster R-CNN with MobileNetV3-Large FPN backbone"""
-        model = fasterrcnn_mobilenet_v3_large_fpn(pretrained=pretrained)
+        if pretrained:
+            model = fasterrcnn_mobilenet_v3_large_fpn(weights=FasterRCNN_MobileNet_V3_Large_FPN_Weights.DEFAULT)
+        else:
+            model = fasterrcnn_mobilenet_v3_large_fpn(weights=None)
         
         # Replace the classifier head
         in_features = model.roi_heads.box_predictor.cls_score.in_features
@@ -62,7 +72,10 @@ class DetectionModel(nn.Module):
     
     def _build_fasterrcnn_mobilenet_v3_large_320_fpn(self, pretrained):
         """Build Faster R-CNN with MobileNetV3-Large 320 FPN backbone"""
-        model = fasterrcnn_mobilenet_v3_large_320_fpn(pretrained=pretrained)
+        if pretrained:
+            model = fasterrcnn_mobilenet_v3_large_320_fpn(weights=FasterRCNN_MobileNet_V3_Large_320_FPN_Weights.DEFAULT)
+        else:
+            model = fasterrcnn_mobilenet_v3_large_320_fpn(weights=None)
         
         # Replace the classifier head
         in_features = model.roi_heads.box_predictor.cls_score.in_features
@@ -72,7 +85,10 @@ class DetectionModel(nn.Module):
     
     def _build_retinanet_resnet50_fpn(self, pretrained):
         """Build RetinaNet with ResNet-50 FPN backbone"""
-        model = retinanet_resnet50_fpn(pretrained=pretrained)
+        if pretrained:
+            model = retinanet_resnet50_fpn(weights=RetinaNet_ResNet50_FPN_Weights.DEFAULT)
+        else:
+            model = retinanet_resnet50_fpn(weights=None)
         
         # Replace the classification head
         num_anchors = model.head.classification_head.num_anchors

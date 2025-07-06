@@ -3,15 +3,21 @@
 # Common settings
 common:
   seed: 42
-  gpu: 6
+  gpu: 4
   num_workers: 4
   disable_progress_bar: false
 
 # Data configuration
 data:
   dataset: 'CRIC'  # Available datasets: CRIC (and other detection datasets in CYTO_task folder)
+  # root: '/jhcnas3/Cervical/CervicalData_NEW/Processed_Data/PATCH_DATA/Coco'
   root: '/jhcnas4/jh/cytology/CYTO_task'
   annotations_dir: ''
+  
+  # Image preprocessing configuration
+  image_size: [640, 640]  # [height, width] - target size for resizing images
+  keep_aspect_ratio: true  # Whether to maintain aspect ratio when resizing
+  normalize: true  # Whether to normalize pixel values
 
 # Model configuration
 model:

@@ -128,22 +128,24 @@ def format_results(metrics, class_names, compute_ci):
     formatted_results += "="*80 + "\n\n"
     
     # Overall metrics with confidence intervals
-    formatted_results += f"mAP@0.5: {format_metric_with_ci(metrics['mAP_50'], metrics.get('mAP_50_ci') if compute_ci else None)}\n"
-    formatted_results += f"mAP@0.5:0.95: {metrics['mAP']:.2f}%\n"
-    formatted_results += f"mAP@0.75: {metrics['mAP_75']:.2f}%\n\n"
+    formatted_results += f"mAP@0.5: {format_metric_with_ci(metrics.get('mAP_50', 0), metrics.get('mAP_50_ci') if compute_ci else None)}\n"
+    if 'mAP_75' in metrics:
+        formatted_results += f"mAP@0.75: {format_metric_with_ci(metrics.get('mAP_75', 0), metrics.get('mAP_75_ci') if compute_ci else None)}\n"
+    formatted_results += f"mAP@0.5:0.95: {format_metric_with_ci(metrics.get('mAP', 0), metrics.get('mAP_ci') if compute_ci else None)}\n"
+    formatted_results += "\n"
     
-    formatted_results += f"Macro Precision: {format_metric_with_ci(metrics['macro_precision'], metrics.get('macro_precision_ci') if compute_ci else None)}\n"
-    formatted_results += f"Macro Recall: {format_metric_with_ci(metrics['macro_recall'], metrics.get('macro_recall_ci') if compute_ci else None)}\n"
-    formatted_results += f"Macro F1 Score: {format_metric_with_ci(metrics['macro_f1'], metrics.get('macro_f1_ci') if compute_ci else None)}\n\n"
+    formatted_results += f"Macro Precision: {format_metric_with_ci(metrics.get('macro_precision', 0), metrics.get('macro_precision_ci') if compute_ci else None)}\n"
+    formatted_results += f"Macro Recall: {format_metric_with_ci(metrics.get('macro_recall', 0), metrics.get('macro_recall_ci') if compute_ci else None)}\n"
+    formatted_results += f"Macro F1 Score: {format_metric_with_ci(metrics.get('macro_f1', 0), metrics.get('macro_f1_ci') if compute_ci else None)}\n\n"
     
-    formatted_results += f"Weighted Precision: {format_metric_with_ci(metrics['weighted_precision'], metrics.get('weighted_precision_ci') if compute_ci else None)}\n"
-    formatted_results += f"Weighted Recall: {format_metric_with_ci(metrics['weighted_recall'], metrics.get('weighted_recall_ci') if compute_ci else None)}\n"
-    formatted_results += f"Weighted F1 Score: {format_metric_with_ci(metrics['weighted_f1'], metrics.get('weighted_f1_ci') if compute_ci else None)}\n\n"
+    formatted_results += f"Weighted Precision: {format_metric_with_ci(metrics.get('weighted_precision', 0), metrics.get('weighted_precision_ci') if compute_ci else None)}\n"
+    formatted_results += f"Weighted Recall: {format_metric_with_ci(metrics.get('weighted_recall', 0), metrics.get('weighted_recall_ci') if compute_ci else None)}\n"
+    formatted_results += f"Weighted F1 Score: {format_metric_with_ci(metrics.get('weighted_f1', 0), metrics.get('weighted_f1_ci') if compute_ci else None)}\n\n"
     
     # Segmentation-specific metrics
-    formatted_results += f"Mean IoU: {format_metric_with_ci(metrics['mean_iou'], metrics.get('mean_iou_ci') if compute_ci else None)}\n"
-    formatted_results += f"Mean Dice: {format_metric_with_ci(metrics['mean_dice'], metrics.get('mean_dice_ci') if compute_ci else None)}\n"
-    formatted_results += f"AJI Score: {format_metric_with_ci(metrics['aji'], metrics.get('aji_ci') if compute_ci else None)}\n"
+    formatted_results += f"Mean IoU: {format_metric_with_ci(metrics.get('mean_iou', 0), metrics.get('mean_iou_ci') if compute_ci else None)}\n"
+    formatted_results += f"Mean Dice: {format_metric_with_ci(metrics.get('mean_dice', 0), metrics.get('mean_dice_ci') if compute_ci else None)}\n"
+    formatted_results += f"AJI Score: {format_metric_with_ci(metrics.get('aji', 0), metrics.get('aji_ci') if compute_ci else None)}\n"
     
     # Per-class metrics
     formatted_results += "\nPer-class Metrics:\n"
@@ -157,9 +159,9 @@ def format_results(metrics, class_names, compute_ci):
         rec_ci = metrics.get('recall_ci')[i] if compute_ci and 'recall_ci' in metrics else None
         f1_ci = metrics.get('f1_ci')[i] if compute_ci and 'f1_ci' in metrics else None
         
-        prec_str = format_metric_with_ci(metrics['precision'][i], prec_ci)
-        rec_str = format_metric_with_ci(metrics['recall'][i], rec_ci)
-        f1_str = format_metric_with_ci(metrics['f1'][i], f1_ci)
+        prec_str = format_metric_with_ci(metrics['precision_per_class'][i], prec_ci)
+        rec_str = format_metric_with_ci(metrics['recall_per_class'][i], rec_ci)
+        f1_str = format_metric_with_ci(metrics['f1_per_class'][i], f1_ci)
         iou_str = f"{metrics['iou_per_class'][i]:.2f}%"
         dice_str = f"{metrics['dice_per_class'][i]:.2f}%"
         support = metrics['total_gt'][i]

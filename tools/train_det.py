@@ -154,19 +154,36 @@ def train(config):
     
     print(f"Loading datasets from {dataset_root}")
     
+    # Get image preprocessing configuration
+    image_config = config['data']
+    image_size = image_config.get('image_size', None)
+    if image_size is not None:
+        image_size = tuple(image_size)  # Convert list to tuple
+    keep_aspect_ratio = image_config.get('keep_aspect_ratio', True)
+    normalize = image_config.get('normalize', True)
+    
     train_dataset = CellDetDataset(
         root=dataset_root,
-        split='train'
+        split='train',
+        image_size=image_size,
+        keep_aspect_ratio=keep_aspect_ratio,
+        normalize=normalize
     )
     
     val_dataset = CellDetDataset(
         root=dataset_root,
-        split='val'
+        split='val',
+        image_size=image_size,
+        keep_aspect_ratio=keep_aspect_ratio,
+        normalize=normalize
     )
     
     test_dataset = CellDetDataset(
         root=dataset_root,
-        split='test'
+        split='test',
+        image_size=image_size,
+        keep_aspect_ratio=keep_aspect_ratio,
+        normalize=normalize
     )
     
     # Create data loaders
@@ -270,19 +287,21 @@ def train(config):
                     score_threshold=config['evaluation']['score_threshold']
                 )
                 
-                val_map = val_metrics['mAP_50']
+                val_map_50_95 = val_metrics['mAP']  # mAP@0.5:0.95 (primary metric)
+                val_map_50 = val_metrics['mAP_50']
                 val_macro_f1 = val_metrics['macro_f1']
                 
                 print(f'Epoch [{epoch}/{config["training"]["epochs"]}], '
                       f'Train Loss: {train_loss:.4f}, '
-                      f'Val mAP@0.5: {val_map:.2f}%, '
+                      f'Val mAP@0.5:0.95: {val_map_50_95:.2f}%, '
+                      f'Val mAP@0.5: {val_map_50:.2f}%, '
                       f'Val Macro F1: {val_macro_f1:.2f}%')
                 
-                # Save best model based on validation mAP
-                if val_map > best_val_map:
-                    best_val_map = val_map
+                # Save best model based on validation mAP@0.5:0.95 (COCO standard)
+                if val_map_50_95 > best_val_map:
+                    best_val_map = val_map_50_95
                     best_model_state = model.state_dict().copy()
-                    print(f"🎯 New best validation mAP: {best_val_map:.2f}%")
+                    print(f"🎯 New best validation mAP@0.5:0.95: {best_val_map:.2f}%")
                     
             except Exception as e:
                 print(f"❌ Validation failed with error: {e}")
@@ -292,13 +311,15 @@ def train(config):
     
     # Save final model
     save_dir = os.path.join(config['output']['model_dir'])
-    os.makedirs(save_dir, exist_ok=True)
     save_path = os.path.join(save_dir, f"{config['model']['name']}_{dataset_name}.pth")
+    
+    # Ensure the parent directory of save_path exists
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
     
     # Use best model state if available
     if best_model_state is not None:
         model.load_state_dict(best_model_state)
-        print(f"Using best model with validation mAP: {best_val_map:.2f}%")
+        print(f"Using best model with validation mAP@0.5:0.95: {best_val_map:.2f}%")
     
     torch.save(model.state_dict(), save_path)
     print(f"Model saved to {save_path}")
@@ -366,9 +387,9 @@ def format_detection_results(metrics, class_names, compute_ci):
     formatted_results += "DETECTION METRICS\n"
     formatted_results += "="*80 + "\n\n"
     
-    # Overall metrics with confidence intervals
-    formatted_results += f"mAP@0.5: {format_metric_with_ci(metrics['mAP_50'], metrics.get('mAP_50_ci') if compute_ci else None)}\n"
+    # Overall metrics with confidence intervals (primary metric first)
     formatted_results += f"mAP@0.5:0.95: {metrics['mAP']:.2f}%\n"
+    formatted_results += f"mAP@0.5: {format_metric_with_ci(metrics['mAP_50'], metrics.get('mAP_50_ci') if compute_ci else None)}\n"
     formatted_results += f"mAP@0.75: {metrics['mAP_75']:.2f}%\n\n"
     
     formatted_results += f"Macro Precision: {format_metric_with_ci(metrics['macro_precision'], metrics.get('macro_precision_ci') if compute_ci else None)}\n"
