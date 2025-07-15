@@ -1,8 +1,8 @@
 _base_ = './yolov3_d53_8xb8-ms-416-273e_coco.py'
 
-data_root = '/jhcnas4/jh/cytology/CYTO_task/TXL-PBC/'
+data_root = '/jhcnas4/jh/cytology/CYTO_task/BCCD/'
 
-# Define your TXL-PBC dataset classes - replace these with your actual class names
+# Define your BCCD dataset classes - replace these with your actual class names
 classes = ('RBC', 'WBC', 'Platelets',)  # Update these with your actual class names
 metainfo = dict(
     classes=classes,
@@ -63,6 +63,6 @@ default_hooks = dict(checkpoint=dict(
     save_last=True             # Always save the latest checkpoint
 ))
 
-work_dir = '/jhcnas2/home/jh/CARE/bench/rliuar/TXL-PBC_yolov3'
+work_dir = '/jhcnas2/home/jh/CARE/bench/rliuar/BCCD_yolov3'
 load_from = 'https://download.openmmlab.com/mmdetection/v2.0/yolo/yolov3_d53_mstrain-416_273e_coco/yolov3_d53_mstrain-416_273e_coco-2b60fcd9.pth'
-# CUDA_VISIBLE_DEVICES=3 nohup python tools/train.py configs/yolo/TXL-PBC_yolov3.py >> TXL-PBC_yolov3.log 2>&1 &
+# CUDA_VISIBLE_DEVICES=3 nohup python tools/train.py configs/yolo/BCCD_yolov3.py >> BCCD_yolov3.log 2>&1 &
