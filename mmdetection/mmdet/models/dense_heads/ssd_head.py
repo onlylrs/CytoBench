@@ -106,6 +106,16 @@ class SSDHead(AnchorHead):
         self.reg_decoded_bbox = reg_decoded_bbox
         self.use_sigmoid_cls = False
         self.cls_focal_loss = False
+
+        # ----- Added: provide a default classification loss so that
+        # BaseDenseHead._predict_by_feat_single can safely access
+        # `self.loss_cls` during validation/inference. The loss itself is
+        # NOT used for training (SSDHead handles its own loss internally),
+        # but some downstream utility functions check for its existence.
+        import torch.nn as _nn  # local import to avoid polluting namespace
+        self.loss_cls = _nn.CrossEntropyLoss(reduction='none')
+        # ----- End Added
+
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
         if self.train_cfg:
