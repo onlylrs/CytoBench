@@ -6,7 +6,7 @@ data_root = '/jhcnas4/jh/cytology/CYTO_task/Ascites2020/det/'
 classes = ('Benign_eosinophil_granulocyte', 'Benign_lymphocyte', 'Benign_mesothelial', 'Benign_neutrophil_granulocyte', 'Malignant_Determined', 'Malignant_Suspicious', )  # Update these with your actual class names
 metainfo = dict(
     classes=classes,
-    palette=[(220, 20, 60), (119, 11, 32), (0, 255, 0),]  # Colors for visualization
+    palette=[(220, 20, 60), (119, 11, 32), (0, 255, 0), (0, 0, 255), (255, 255, 0), (255, 0, 255),]  # Colors for visualization
 )
 
 model = dict(

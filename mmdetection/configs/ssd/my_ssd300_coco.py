@@ -1,6 +1,3 @@
-# dataset settings
-data_root = '/jhcnas4/jh/cytology/CYTO_task/TXL-PBC/'
-
 _base_ = [
     '../_base_/models/ssd300.py',
     '../_base_/schedules/schedule_2x.py', 
@@ -8,15 +5,21 @@ _base_ = [
     '../_base_/datasets/coco_detection.py'
 ]
 
+# dataset settings
+data_root = '/jhcnas4/jh/cytology/CYTO_task/TXL-PBC/'
+
+metainfo = {
+    'classes': ('WBC', 'RBC', 'Platelets'),  # Update these with your actual class names
+    'palette': [(220, 20, 60), (119, 11, 32), (0, 255, 0)]  # Colors for visualization
+}
+
+
 # Custom dataset settings for cytology dataset
 dataset_type = 'CocoDataset'
 backend_args = None
 
 # Dataset metadata for cytology classification  
-metainfo = {
-    'classes': ('WBC', 'RBC', 'Platelets'),  # Update these with your actual class names
-    'palette': [(220, 20, 60), (119, 11, 32), (0, 255, 0)]  # Colors for visualization
-}
+
 
 # Model configuration - override num_classes for our 2-class dataset
 model = dict(
