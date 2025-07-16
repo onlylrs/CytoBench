@@ -19,6 +19,15 @@ import numpy as np
 from pathlib import Path
 from typing import List
 
+# Optional progress bar
+try:
+    from tqdm import tqdm  # type: ignore
+except ImportError:  # pragma: no cover
+    tqdm = None  # fallback if tqdm is not installed
+
+import contextlib
+import io
+
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 
@@ -42,6 +51,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gt", required=True, type=Path, help="Ground-truth COCO JSON")
     parser.add_argument("--dt", required=True, type=Path, help="Detection results JSON (from MMDet --outfile-prefix)")
     parser.add_argument("--per-class", action="store_true", help="Print per-class metrics as well")
+    parser.add_argument(
+        "--bootstrap",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "Number of bootstrap resamples for 95% confidence intervals. "
+            "Set to 0 (default) to disable bootstrapping."
+        ),
+    )
     parser.add_argument("--out", type=Path, help="Optional path to save the metrics text output")
     return parser.parse_args()
 
@@ -113,6 +132,121 @@ def main():
     mean_line = f"Precision={mean_p:.4f}  Recall={mean_r:.4f}  F1={mean_f1:.4f}"
     print(mean_line)
     output_lines.append(mean_line)
+
+    # ------------------------------------------------------------------
+    # Optional bootstrap for 95% confidence intervals
+    # ------------------------------------------------------------------
+    if args.bootstrap > 0:
+        print(f"\nBootstrapping with {args.bootstrap} resamples (95% CI)…")
+        output_lines.append(f"\nBootstrapping with {args.bootstrap} resamples (95% CI)…")
+
+        rng = np.random.default_rng()
+        orig_img_ids = coco_eval.params.imgIds  # type: ignore
+        n_images = len(orig_img_ids)
+
+        # Caching structures for fast lookup
+        id_to_index = {img_id: idx for idx, img_id in enumerate(orig_img_ids)}
+        orig_evalImgs = coco_eval.evalImgs  # Flat list of per-image eval dicts
+
+        n_cats = len(coco_eval.params.catIds)
+        n_area = len(coco_eval.params.areaRng)
+
+        def build_resampled_evalimgs(sample_ids: List[int]) -> list:  # noqa: D401
+            """Construct a new evalImgs list following the sample image order.
+
+            The original evalImgs is laid out with maxDet as the
+            innermost dimension, then images, area, category.
+            """
+            new_eval = []
+            for cat_idx in range(n_cats):
+                for area_idx in range(n_area):
+                    for img_id in sample_ids:
+                        img_idx = id_to_index[img_id]
+                        index = ((cat_idx * n_area) + area_idx) * n_images + img_idx
+                        new_eval.append(orig_evalImgs[index])
+            return new_eval
+
+        p_samples: List[float] = []
+        r_samples: List[float] = []
+        f1_samples: List[float] = []
+        ap30_samples: List[float] = []
+        ap50_samples: List[float] = []
+
+        iterator = range(args.bootstrap)
+        if tqdm is not None:
+            iterator = tqdm(iterator, desc="Bootstrapping", unit="resample")  # type: ignore
+
+        # We'll reuse the same COCOeval object, replacing evalImgs & imgIds each iteration
+        for _ in iterator:
+            sample_ids = rng.choice(orig_img_ids, size=n_images, replace=True).tolist()
+
+            coco_eval.params.imgIds = sample_ids  # type: ignore
+            coco_eval.evalImgs = build_resampled_evalimgs(sample_ids)
+
+            # Suppress stdout from accumulate (very quiet already, but to be safe)
+            with contextlib.redirect_stdout(io.StringIO()):
+                coco_eval.accumulate()
+
+            prec_bs = coco_eval.eval["precision"]
+            rec_bs = coco_eval.eval["recall"]
+
+            p_tmp: List[float] = []
+            r_tmp: List[float] = []
+
+            for t in range(1, len(iou_thrs)):  # skip IoU 0.30
+                p_t = prec_bs[t, :, :, area_idx, max_det_idx]
+                r_t = rec_bs[t, :, area_idx, max_det_idx]
+
+                valid_p = p_t[p_t > -1]
+                valid_r = r_t[r_t > -1]
+
+                mean_p_t = float(valid_p.mean()) if valid_p.size else 0.0
+                mean_r_t = float(valid_r.mean()) if valid_r.size else 0.0
+
+                p_tmp.append(mean_p_t)
+                r_tmp.append(mean_r_t)
+
+            mean_p_bs = float(np.mean(p_tmp))
+            mean_r_bs = float(np.mean(r_tmp))
+            mean_f1_bs = float(prf1(mean_p_bs, mean_r_bs))
+
+            p_samples.append(mean_p_bs)
+            r_samples.append(mean_r_bs)
+            f1_samples.append(mean_f1_bs)
+
+            # AP30 and AP50 (mean precision across recall & categories)
+            p30_t = prec_bs[0, :, :, area_idx, max_det_idx]
+            valid_p30 = p30_t[p30_t > -1]
+            mean_p30 = float(valid_p30.mean()) if valid_p30.size else 0.0
+            ap30_samples.append(mean_p30)
+
+            p50_t = prec_bs[1, :, :, area_idx, max_det_idx]
+            valid_p50 = p50_t[p50_t > -1]
+            mean_p50 = float(valid_p50.mean()) if valid_p50.size else 0.0
+            ap50_samples.append(mean_p50)
+
+        # Calculate 2.5th and 97.5th percentiles
+        p_lo, p_hi = np.percentile(p_samples, [2.5, 97.5])
+        r_lo, r_hi = np.percentile(r_samples, [2.5, 97.5])
+        f1_lo, f1_hi = np.percentile(f1_samples, [2.5, 97.5])
+
+        ap30_lo, ap30_hi = np.percentile(ap30_samples, [2.5, 97.5])
+        ap50_lo, ap50_hi = np.percentile(ap50_samples, [2.5, 97.5])
+
+        ci_line = (
+            "95% CI (IoUs 0.50–0.95): "
+            f"Precision=[{p_lo:.4f}, {p_hi:.4f}]  "
+            f"Recall=[{r_lo:.4f}, {r_hi:.4f}]  "
+            f"F1=[{f1_lo:.4f}, {f1_hi:.4f}]"
+        )
+        print(ci_line)
+        output_lines.append(ci_line)
+
+        ap30_line = f"AP30 95% CI: [{ap30_lo:.4f}, {ap30_hi:.4f}]"
+        ap50_line = f"AP50 95% CI: [{ap50_lo:.4f}, {ap50_hi:.4f}]"
+        print(ap30_line)
+        print(ap50_line)
+        output_lines.extend([ap30_line, ap50_line])
 
     if args.per_class:
         print("\nPer-class metrics (mean over recall axis):")

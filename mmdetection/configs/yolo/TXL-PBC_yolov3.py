@@ -3,7 +3,7 @@ _base_ = './yolov3_d53_8xb8-ms-416-273e_coco.py'
 data_root = '/jhcnas4/jh/cytology/CYTO_task/TXL-PBC/'
 
 # Define your TXL-PBC dataset classes - replace these with your actual class names
-classes = ('RBC', 'WBC', 'Platelets',)  # Update these with your actual class names
+classes = ('RBC', 'WBC', 'Platelet',)  # Update these with your actual class names
 metainfo = dict(
     classes=classes,
     palette=[(220, 20, 60), (119, 11, 32), (0, 255, 0),]  # Colors for visualization

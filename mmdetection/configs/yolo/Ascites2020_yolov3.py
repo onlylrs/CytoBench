@@ -3,15 +3,15 @@ _base_ = './yolov3_d53_8xb8-ms-416-273e_coco.py'
 data_root = '/jhcnas4/jh/cytology/CYTO_task/Ascites2020/det/'
 
 # Define your Ascites2020 dataset classes - replace these with your actual class names
-classes = ('Benign_eosinophil_granulocyte', 'Benign_lymphocyte', 'Benign_mesothelial', 'Benign_neutrophil_granulocyte', 'Malignant_Determined', 'Malignant_Suspicious', )  # Update these with your actual class names
+classes = ('cell', )  # Update these with your actual class names
 metainfo = dict(
     classes=classes,
-    palette=[(220, 20, 60), (119, 11, 32), (0, 255, 0), (0, 0, 255), (255, 255, 0), (255, 0, 255),]  # Colors for visualization
+    palette=[(220, 20, 60),]  # Colors for visualization
 )
 
 model = dict(
     bbox_head=dict(
-        num_classes=6))
+        num_classes=1))
 
 train_dataloader = dict(
     batch_size=8,
