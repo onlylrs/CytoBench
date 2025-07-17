@@ -40,6 +40,9 @@ test_dataloader = dict(batch_size=8, dataset=dict(
     ann_file='test.json',
     data_prefix=dict(img='test/')
 ))
+test_evaluator = dict(
+    outfile_prefix='work_dirs/TXL-PBC_ssd300/TXL-PBC_ssd300_test'
+)
 
 optim_wrapper = dict(
     type='OptimWrapper',

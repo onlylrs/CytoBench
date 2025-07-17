@@ -45,7 +45,8 @@ val_evaluator = dict(
 test_evaluator = dict(
     type='CocoMetric',
     ann_file=data_root + 'test.json',
-    metric='bbox')
+    metric='bbox',
+    outfile_prefix='/jhcnas2/home/jh/CARE/bench/rliuar/NMCD_ssd300/NMCD_ssd300_test')
 
 optim_wrapper = dict(
     type='OptimWrapper',

@@ -44,7 +44,8 @@ val_evaluator = dict(
 )
 test_evaluator = dict(
     ann_file=data_root + 'test.json',
-    metric='bbox'
+    metric='bbox',
+    outfile_prefix='/jhcnas2/home/jh/CARE/bench/rliuar/BCCD_yolov3/BCCD_yolov3_test'
 )
 train_cfg = dict(max_epochs=273, val_interval=7)
 

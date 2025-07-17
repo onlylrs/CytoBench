@@ -91,7 +91,8 @@ val_evaluator = dict(
 )
 test_evaluator = dict(
     ann_file=data_root + 'test.json',
-    metric='bbox'
+    metric='bbox',
+    outfile_prefix='/jhcnas2/home/jh/CARE/bench/rliuar/BCCD_yolov3_mobilenetv2/BCCD_yolov3_mobilenetv2_test'
 )
 train_cfg = dict(max_epochs=30, val_interval=1)
 
