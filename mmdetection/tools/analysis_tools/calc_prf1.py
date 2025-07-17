@@ -116,7 +116,7 @@ def main():
         global_r.append(mean_r)
         global_f1.append(f1)
 
-        line = f"IoU={thr:.2f}  Precision={mean_p:.4f}  Recall={mean_r:.4f}  F1={f1:.4f}"
+        line = f"IoU={thr:.2f}  Precision={mean_p:.6f}  Recall={mean_r:.6f}  F1={f1:.6f}"
         print(line)
         output_lines.append(line)
 
@@ -125,11 +125,11 @@ def main():
     mean_r = np.mean(global_r[1:])
     mean_f1 = np.mean(global_f1[1:])
 
-    title_mean = "\nMean over IoUs 0.50–0.95 (same idea as mAP):"
+    title_mean = "\nMean over IoUs 0.50–0.95:"
     print(title_mean)
     output_lines.append(title_mean)
 
-    mean_line = f"Precision={mean_p:.4f}  Recall={mean_r:.4f}  F1={mean_f1:.4f}"
+    mean_line = f"Precision={mean_p:.6f}  Recall={mean_r:.6f}  F1={mean_f1:.6f}"
     print(mean_line)
     output_lines.append(mean_line)
 
@@ -235,15 +235,15 @@ def main():
 
         ci_line = (
             "95% CI (IoUs 0.50–0.95): "
-            f"Precision=[{p_lo:.4f}, {p_hi:.4f}]  "
-            f"Recall=[{r_lo:.4f}, {r_hi:.4f}]  "
-            f"F1=[{f1_lo:.4f}, {f1_hi:.4f}]"
+            f"Precision=[{p_lo:.6f}, {p_hi:.6f}]  "
+            f"Recall=[{r_lo:.6f}, {r_hi:.6f}]  "
+            f"F1=[{f1_lo:.6f}, {f1_hi:.6f}]"
         )
         print(ci_line)
         output_lines.append(ci_line)
 
-        ap30_line = f"AP30 95% CI: [{ap30_lo:.4f}, {ap30_hi:.4f}]"
-        ap50_line = f"AP50 95% CI: [{ap50_lo:.4f}, {ap50_hi:.4f}]"
+        ap30_line = f"AP30 95% CI: [{ap30_lo:.6f}, {ap30_hi:.6f}]"
+        ap50_line = f"AP50 95% CI: [{ap50_lo:.6f}, {ap50_hi:.6f}]"
         print(ap30_line)
         print(ap50_line)
         output_lines.extend([ap30_line, ap50_line])
@@ -264,7 +264,7 @@ def main():
                 r_cls.append(float(rec))
                 f1_cls.append(float(prf1(mean_p_cls, rec)))
             # Average over IoUs to align with mAP
-            cls_line = f"{name:<20}  P={np.mean(p_cls):.4f}  R={np.mean(r_cls):.4f}  F1={np.mean(f1_cls):.4f}"
+            cls_line = f"{name:<20}  P={np.mean(p_cls):.6f}  R={np.mean(r_cls):.6f}  F1={np.mean(f1_cls):.6f}"
             print(cls_line)
             output_lines.append(cls_line)
 
@@ -287,6 +287,19 @@ def main():
         with open(out_path, "w") as f:
             f.write("\n".join(output_lines))
         print(f"\nMetrics written to {out_path}")
+
+    # -------------------------
+    # Final concise summary line
+    # -------------------------
+    summary_line = (
+        "\nSUMMARY\n"
+        f"mAP: {mean_p:.6f} ({p_lo:.6f} - {p_hi:.6f})\n"
+        f"mAR: {mean_r:.6f} ({r_lo:.6f} - {r_hi:.6f})\n"
+        f"AP30: {global_p[0]:.6f} ({ap30_lo:.6f} - {ap30_hi:.6f})\n"
+        f"AP50: {global_p[1]:.6f} ({ap50_lo:.6f} - {ap50_hi:.6f})\n"
+    )
+    print(summary_line)
+    output_lines.append(summary_line)
 
 
 if __name__ == "__main__":
