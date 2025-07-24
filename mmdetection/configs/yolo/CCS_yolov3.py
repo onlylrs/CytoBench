@@ -66,4 +66,4 @@ default_hooks = dict(checkpoint=dict(
 
 work_dir = '/jhcnas2/home/jh/CARE/bench/rliuar/CCS_yolov3'
 load_from = 'https://download.openmmlab.com/mmdetection/v2.0/yolo/yolov3_d53_mstrain-416_273e_coco/yolov3_d53_mstrain-416_273e_coco-2b60fcd9.pth'
-# CUDA_VISIBLE_DEVICES=3 nohup python tools/train.py configs/yolo/CCS_yolov3.py >> CCS_yolov3.log 2>&1 &
+# CUDA_VISIBLE_DEVICES=5 nohup python tools/train.py configs/yolo/CCS_yolov3.py > logs/CCS_yolov3.log 2>&1 &

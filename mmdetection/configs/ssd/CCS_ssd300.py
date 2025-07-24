@@ -71,4 +71,4 @@ default_hooks = dict(
 
 load_from = 'https://download.openmmlab.com/mmdetection/v2.0/ssd/ssd300_coco/ssd300_coco_20210803_015428-d231a06e.pth'
 work_dir = '/jhcnas2/home/jh/CARE/bench/rliuar/CCS_ssd300'
-# CUDA_VISIBLE_DEVICES=3 nohup python tools/train.py configs/ssd/CCS_ssd300.py >> CCS_ssd300.log 2>&1 &
+# CUDA_VISIBLE_DEVICES=3 nohup python tools/train.py configs/ssd/CCS_ssd300.py > logs/CCS_ssd300.log 2>&1 &

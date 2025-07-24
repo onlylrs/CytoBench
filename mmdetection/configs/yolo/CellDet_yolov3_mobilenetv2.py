@@ -113,5 +113,5 @@ default_hooks = dict(checkpoint=dict(
 work_dir = '/jhcnas2/home/jh/CARE/bench/rliuar/CellDet_yolov3_mobilenetv2'
 load_from = 'https://download.openmmlab.com/mmdetection/v2.0/yolo/yolov3_mobilenetv2_mstrain-416_300e_coco/yolov3_mobilenetv2_mstrain-416_300e_coco_20210718_010823-f68a07b3.pth'
 
-# CUDA_VISIBLE_DEVICES=3 nohup python tools/train.py configs/yolo/CellDet_yolov3_mobilenetv2.py >> logs/CellDet_yolov3_mobilenetv2.log 2>&1 &
+# CUDA_VISIBLE_DEVICES=6 nohup python tools/train.py configs/yolo/CellDet_yolov3_mobilenetv2.py > logs/CellDet_yolov3_mobilenetv2.log 2>&1 &
 
