@@ -1,23 +1,23 @@
 _base_ = ['../mask-rcnn_r101_fpn_ms-poly-3x_coco.py']
 
-data_root = '/jhcnas4/jh/cytology/CYTO_task/SegPC/'
+data_root = '/jhcnas4/jh/cytology/CYTO_task/UFSC_OCPap/seg/'
 
-classes = ('cytoplasm', 'nucleus',)  # Update these with your actual class names
+classes = ('abnormal', 'out_of_focus', 'blood', 'normal', 'reactive', 'dividing', 'not_defined',)  # Update these with your actual class names
 metainfo = dict(
     classes=classes,
-    palette=[(220, 20, 60), (119, 11, 32),]  # Colors for visualization
+    palette=[(220, 20, 60), (119, 11, 32), (225, 0, 0), (0, 0, 255), (0, 255, 0), (255, 0, 255), (0, 0, 0)]  # Colors for visualization
 )
 
 model = dict(
     roi_head=dict(
         bbox_head=dict(
-            num_classes=2
+            num_classes=7
         ),
         mask_head=dict(
-            num_classes=2
+            num_classes=7
         )
     )
-)   
+)
 
 train_dataloader = dict(
     batch_size=2,
@@ -61,7 +61,7 @@ val_evaluator = dict(
 test_evaluator = dict(
     ann_file=data_root + 'test.json',
     metric=['bbox','segm'],
-    outfile_prefix='/jhcnas2/home/jh/CARE/bench/rliuar/SegPC_mask_rcnn_r101/SegPC_mask_rcnn_r101_test'
+    outfile_prefix='/jhcnas2/home/jh/CARE/bench/rliuar/USFC_mask_rcnn_r101/USFC_mask_rcnn_r101_test'
 )
 train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=12, val_interval=1)
 
@@ -79,9 +79,9 @@ default_hooks = dict(checkpoint=dict(
     save_last=True             # Always save the latest checkpoint
 ))
 
-work_dir = '/jhcnas2/home/jh/CARE/bench/rliuar/SegPC_mask_rcnn_r101'
+work_dir = '/jhcnas2/home/jh/CARE/bench/rliuar/USFC_mask_rcnn_r101'
 
 load_from = 'https://download.openmmlab.com/mmdetection/v2.0/mask_rcnn/mask_rcnn_r101_fpn_mstrain-poly_3x_coco/mask_rcnn_r101_fpn_mstrain-poly_3x_coco_20210524_200244-5675c317.pth'
 
-# CUDA_VISIBLE_DEVICES=3 nohup python tools/train.py configs/mask_rcnn/my/SegPC_mask_rcnn_r101.py > SegPC_mask_rcnn_r101.log 2>&1 &
+# CUDA_VISIBLE_DEVICES=3 nohup python tools/train.py configs/mask_rcnn/my/USFC_mask_rcnn_r101.py > USFC_mask_rcnn_r101.log 2>&1 &
 

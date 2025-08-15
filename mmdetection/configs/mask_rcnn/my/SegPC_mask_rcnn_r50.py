@@ -2,7 +2,7 @@ _base_ = ['../mask-rcnn_r50_fpn_ms-poly-3x_coco.py']
 
 data_root = '/jhcnas4/jh/cytology/CYTO_task/SegPC/'
 
-classes = ('Cell', 'Nuclei',)  # Update these with your actual class names
+classes = ('cytoplasm', 'nucleus',)  # Update these with your actual class names
 metainfo = dict(
     classes=classes,
     palette=[(220, 20, 60), (119, 11, 32),]  # Colors for visualization

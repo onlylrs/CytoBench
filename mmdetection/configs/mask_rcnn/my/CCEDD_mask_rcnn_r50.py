@@ -2,7 +2,7 @@ _base_ = ['../mask-rcnn_r50_fpn_ms-poly-3x_coco.py']
 
 data_root = '/jhcnas4/jh/cytology/CYTO_task/CCEDD/'
 
-classes = ('Cell', 'kernel',)  # Update these with your actual class names
+classes = ('cell', 'kernel',)  # Update these with your actual class names
 metainfo = dict(
     classes=classes,
     palette=[(220, 20, 60), (119, 11, 32),]  # Colors for visualization
@@ -26,7 +26,7 @@ train_dataloader = dict(
         dataset=dict(
             metainfo=metainfo,
             data_root=data_root,
-            ann_file='train.json',
+            ann_file='new_train.json',
             data_prefix=dict(img='train/')
         )
     )    
@@ -38,7 +38,7 @@ val_dataloader = dict(
     dataset=dict(
         metainfo=metainfo,
         data_root=data_root,
-        ann_file='val.json',
+        ann_file='new_val.json',
         data_prefix=dict(img='val/')
     )
 )
@@ -49,17 +49,17 @@ test_dataloader = dict(
     dataset=dict(
         metainfo=metainfo,
         data_root=data_root,
-        ann_file='test.json',
+        ann_file='new_test.json',
         data_prefix=dict(img='test/')
     )
 )
 
 val_evaluator = dict(
-    ann_file=data_root + 'val.json',
+    ann_file=data_root + 'new_val.json',
     metric=['bbox','segm']
 )
 test_evaluator = dict(
-    ann_file=data_root + 'test.json',
+    ann_file=data_root + 'new_test.json',
     metric=['bbox','segm'],
     outfile_prefix='/jhcnas2/home/jh/CARE/bench/rliuar/CCEDD_mask_rcnn_r50/CCEDD_mask_rcnn_r50_test'
 )
